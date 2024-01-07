@@ -1,128 +1,214 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="utf-8">
-        <meta http-equiv="X-UA-Compatible" content="IE=edge">
-        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
-        <meta name="mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <link rel="stylesheet" href="css/leaflet.css"><link rel="stylesheet" href="css/L.Control.Locate.min.css">
-        <link rel="stylesheet" href="css/qgis2web.css"><link rel="stylesheet" href="css/fontawesome-all.min.css">
-        <style>
-        html, body, #map {
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            margin: 0;
-        }
-        </style>
-        <title></title>
-    </head>
-    <body>
-        <div id="map">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="stylesheet" href="css/leaflet.css" />
+    <link rel="stylesheet" href="css/L.Control.Locate.min.css" />
+    <link rel="stylesheet" href="css/qgis2web.css" />
+    <link rel="stylesheet" href="css/fontawesome-all.min.css" />
+    <link rel="stylesheet" href="css/dialog.css" />
+    <style>
+      html,
+      body,
+      #map {
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        margin: 0;
+      }
+      body {
+        box-sizing: border-box;
+      }
+    </style>
+    <title></title>
+  </head>
+  <body>
+    <div id="map"></div>
+    <button class="show-modal">
+      <i class="fa fa-info-circle fa-2" aria-hidden="true"></i>
+    </button>
+    <div class="bottom-sheet">
+      <div class="sheet-overlay"></div>
+      <div class="content">
+        <div class="header">
+          <div class="drag-icon"><span></span></div>
         </div>
-        <script src="js/qgis2web_expressions.js"></script>
-        <script src="js/leaflet.js"></script><script src="js/L.Control.Locate.min.js"></script>
-        <script src="js/leaflet.rotatedMarker.js"></script>
-        <script src="js/leaflet.pattern.js"></script>
-        <script src="js/leaflet-hash.js"></script>
-        <script src="js/Autolinker.min.js"></script>
-        <script src="js/rbush.min.js"></script>
-        <script src="js/labelgun.min.js"></script>
-        <script src="js/labels.js"></script>
-        <script src="data/streams_line_3.js"></script>
-        <script>
-        var map = L.map('map', {
-            zoomControl:true, maxZoom:28, minZoom:1
-        }).fitBounds([[12.873269835297844,80.0879556750873],[13.023382378839308,80.32504470880778]]);
-        var hash = new L.Hash(map);
-        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
-        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
-        L.control.locate({locateOptions: {maxZoom: 19}}).addTo(map);
-        var bounds_group = new L.featureGroup([]);
-        function setBounds() {
+        <!-- Edit the content below -->
+        <div class="body">
+          <h2>Title</h2>
+          <p>Content 1</p>
+          <p>Content 2</p>
+          <p>Content 3</p>
+          <p>Content 4</p>
+          <p>Content 5</p>
+          <p>Content 6</p>
+          <p>Content 7</p>
+          <p>Content 8</p>
+          <p>Content 9</p>
+          <p>Content 10</p>
+          <p>Content 11</p>
+          <p>Content 12</p>
+          <p>Content 13</p>
+          <p>Content 14</p>
+        </div>
+        <!-- Edit the content above -->
+        <div class="footer">
+          <i class="close-btn fa fa-times fa-2" aria-hidden="true"></i>
+        </div>
+      </div>
+    </div>
+    <script src="js/qgis2web_expressions.js"></script>
+    <script src="js/leaflet.js"></script>
+    <script src="js/L.Control.Locate.min.js"></script>
+    <script src="js/leaflet.rotatedMarker.js"></script>
+    <script src="js/leaflet.pattern.js"></script>
+    <script src="js/leaflet-hash.js"></script>
+    <script src="js/Autolinker.min.js"></script>
+    <script src="js/rbush.min.js"></script>
+    <script src="js/labelgun.min.js"></script>
+    <script src="js/labels.js"></script>
+    <script src="data/streams_line_3.js"></script>
+    <script>
+      var map = L.map("map", {
+        zoomControl: true,
+        maxZoom: 28,
+        minZoom: 1,
+      }).fitBounds([
+        [12.873269835297844, 80.0879556750873],
+        [13.023382378839308, 80.32504470880778],
+      ]);
+      var hash = new L.Hash(map);
+      map.attributionControl.setPrefix(
+        '<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>'
+      );
+      var autolinker = new Autolinker({
+        truncate: { length: 30, location: "smart" },
+      });
+      L.control.locate({ locateOptions: { maxZoom: 19 } }).addTo(map);
+      var bounds_group = new L.featureGroup([]);
+      function setBounds() {}
+      map.createPane("pane_GoogleHybrid_0");
+      map.getPane("pane_GoogleHybrid_0").style.zIndex = 400;
+      var layer_GoogleHybrid_0 = L.tileLayer(
+        "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
+        {
+          pane: "pane_GoogleHybrid_0",
+          opacity: 0.693,
+          attribution:
+            '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+          minZoom: 1,
+          maxZoom: 28,
+          minNativeZoom: 0,
+          maxNativeZoom: 20,
         }
-        map.createPane('pane_GoogleHybrid_0');
-        map.getPane('pane_GoogleHybrid_0').style.zIndex = 400;
-        var layer_GoogleHybrid_0 = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-            pane: 'pane_GoogleHybrid_0',
-            opacity: 0.693,
-            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
-            minZoom: 1,
-            maxZoom: 28,
-            minNativeZoom: 0,
-            maxNativeZoom: 20
-        });
-        layer_GoogleHybrid_0;
-        map.addLayer(layer_GoogleHybrid_0);
-        map.createPane('pane_DEM_1');
-        map.getPane('pane_DEM_1').style.zIndex = 401;
-        var img_DEM_1 = 'data/DEM_1.png';
-        var img_bounds_DEM_1 = [[12.469166667,79.55],[13.5625,80.348333333]];
-        var layer_DEM_1 = new L.imageOverlay(img_DEM_1,
-                                              img_bounds_DEM_1,
-                                              {pane: 'pane_DEM_1'});
-        bounds_group.addLayer(layer_DEM_1);
-        map.addLayer(layer_DEM_1);
-        map.createPane('pane_substreams_2');
-        map.getPane('pane_substreams_2').style.zIndex = 402;
-        var img_substreams_2 = 'data/substreams_2.png';
-        var img_bounds_substreams_2 = [[12.47325,79.554116667],[13.55005,80.345916667]];
-        var layer_substreams_2 = new L.imageOverlay(img_substreams_2,
-                                              img_bounds_substreams_2,
-                                              {pane: 'pane_substreams_2'});
-        bounds_group.addLayer(layer_substreams_2);
-        map.addLayer(layer_substreams_2);
-        function pop_streams_line_3(feature, layer) {
-            var popupContent = '<table>\
+      );
+      layer_GoogleHybrid_0;
+      map.addLayer(layer_GoogleHybrid_0);
+      map.createPane("pane_DEM_1");
+      map.getPane("pane_DEM_1").style.zIndex = 401;
+      var img_DEM_1 = "data/DEM_1.png";
+      var img_bounds_DEM_1 = [
+        [12.469166667, 79.55],
+        [13.5625, 80.348333333],
+      ];
+      var layer_DEM_1 = new L.imageOverlay(img_DEM_1, img_bounds_DEM_1, {
+        pane: "pane_DEM_1",
+      });
+      bounds_group.addLayer(layer_DEM_1);
+      map.addLayer(layer_DEM_1);
+      map.createPane("pane_substreams_2");
+      map.getPane("pane_substreams_2").style.zIndex = 402;
+      var img_substreams_2 = "data/substreams_2.png";
+      var img_bounds_substreams_2 = [
+        [12.47325, 79.554116667],
+        [13.55005, 80.345916667],
+      ];
+      var layer_substreams_2 = new L.imageOverlay(
+        img_substreams_2,
+        img_bounds_substreams_2,
+        { pane: "pane_substreams_2" }
+      );
+      bounds_group.addLayer(layer_substreams_2);
+      map.addLayer(layer_substreams_2);
+      function pop_streams_line_3(feature, layer) {
+        var popupContent =
+          '<table>\
                     <tr>\
-                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(feature.properties['fid'].toLocaleString()) : '') + '</td>\
+                        <td colspan="2">' +
+          (feature.properties["fid"] !== null
+            ? autolinker.link(feature.properties["fid"].toLocaleString())
+            : "") +
+          '</td>\
                     </tr>\
                     <tr>\
-                        <td colspan="2">' + (feature.properties['cat'] !== null ? autolinker.link(feature.properties['cat'].toLocaleString()) : '') + '</td>\
+                        <td colspan="2">' +
+          (feature.properties["cat"] !== null
+            ? autolinker.link(feature.properties["cat"].toLocaleString())
+            : "") +
+          '</td>\
                     </tr>\
                     <tr>\
-                        <td colspan="2">' + (feature.properties['label'] !== null ? autolinker.link(feature.properties['label'].toLocaleString()) : '') + '</td>\
+                        <td colspan="2">' +
+          (feature.properties["label"] !== null
+            ? autolinker.link(feature.properties["label"].toLocaleString())
+            : "") +
+          "</td>\
                     </tr>\
-                </table>';
-            layer.bindPopup(popupContent, {maxHeight: 400});
-        }
+                </table>";
+        layer.bindPopup(popupContent, { maxHeight: 400 });
+      }
 
-        function style_streams_line_3_0() {
-            return {
-                pane: 'pane_streams_line_3',
-                opacity: 1,
-                color: 'rgba(0,31,231,0.6431372549019608)',
-                dashArray: '',
-                lineCap: 'square',
-                lineJoin: 'bevel',
-                weight: 4.0,
-                fillOpacity: 0,
-                interactive: true,
-            }
-        }
-        map.createPane('pane_streams_line_3');
-        map.getPane('pane_streams_line_3').style.zIndex = 403;
-        map.getPane('pane_streams_line_3').style['mix-blend-mode'] = 'normal';
-        var layer_streams_line_3 = new L.geoJson(json_streams_line_3, {
-            attribution: '',
-            interactive: true,
-            dataVar: 'json_streams_line_3',
-            layerName: 'layer_streams_line_3',
-            pane: 'pane_streams_line_3',
-            onEachFeature: pop_streams_line_3,
-            style: style_streams_line_3_0,
-        });
-        bounds_group.addLayer(layer_streams_line_3);
-        map.addLayer(layer_streams_line_3);
-        var baseMaps = {};
-        L.control.layers(baseMaps,{'<img src="legend/streams_line_3.png" /> streams_line': layer_streams_line_3,"substreams": layer_substreams_2,"DEM": layer_DEM_1,"Google Hybrid": layer_GoogleHybrid_0,}).addTo(map);
-        setBounds();
-        L.ImageOverlay.include({
-            getBounds: function () {
-                return this._bounds;
-            }
-        });
-        </script>
-    </body>
+      function style_streams_line_3_0() {
+        return {
+          pane: "pane_streams_line_3",
+          opacity: 1,
+          color: "rgba(0,31,231,0.6431372549019608)",
+          dashArray: "",
+          lineCap: "square",
+          lineJoin: "bevel",
+          weight: 4.0,
+          fillOpacity: 0,
+          interactive: true,
+        };
+      }
+      map.createPane("pane_streams_line_3");
+      map.getPane("pane_streams_line_3").style.zIndex = 403;
+      map.getPane("pane_streams_line_3").style["mix-blend-mode"] = "normal";
+      var layer_streams_line_3 = new L.geoJson(json_streams_line_3, {
+        attribution: "",
+        interactive: true,
+        dataVar: "json_streams_line_3",
+        layerName: "layer_streams_line_3",
+        pane: "pane_streams_line_3",
+        onEachFeature: pop_streams_line_3,
+        style: style_streams_line_3_0,
+      });
+      bounds_group.addLayer(layer_streams_line_3);
+      map.addLayer(layer_streams_line_3);
+      var baseMaps = {};
+      L.control
+        .layers(baseMaps, {
+          '<img src="legend/streams_line_3.png" /> streams_line':
+            layer_streams_line_3,
+          substreams: layer_substreams_2,
+          DEM: layer_DEM_1,
+          "Google Hybrid": layer_GoogleHybrid_0,
+        })
+        .addTo(map);
+      setBounds();
+      L.ImageOverlay.include({
+        getBounds: function () {
+          return this._bounds;
+        },
+      });
+    </script>
+    <script src="js/dialog.js" defer></script>
+  </body>
 </html>
