@@ -1,5 +1,5 @@
 // ============================================================
-// ChennaiSafe — Smart Property Decision Tool
+// IllamAI — Smart Property Decision Tool
 // app.js — Core application logic
 // ============================================================
 
@@ -2346,7 +2346,7 @@ const App = (() => {
     const score = streamData ? streamData.score + '/100' : 'N/A';
     const dist = streamData ? `Nearest stream: ${streamData.distLabel}\n` : '';
     const text =
-      `🌊 *ChennaiSafe — Custom Location Analysis*\n\n` +
+      `🌊 *IllamAI — Custom Location Analysis*\n\n` +
       `📍 ${address.short || 'Custom Location'}${address.district ? ', ' + address.district : ''}\n` +
       `🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}\n\n` +
       `Flood Risk: ${tier} (${score})\n${dist}` +
@@ -2372,7 +2372,7 @@ const App = (() => {
     const score = streamA ? FloodScorer.blendedScore(zone.floodScore, streamA.score) : zone.floodScore;
     const streamLine = streamA ? `📍 Nearest flood stream: ${streamA.distLabel} away\n` : '';
     const text =
-      `🌊 *ChennaiSafe — ${zone.name}*\n\n` +
+      `🌊 *IllamAI — ${zone.name}*\n\n` +
       `Flood Risk: ${floodTierLabel(zone.floodTier)} (${score}/100)\n` +
       `${streamLine}` +
       `💰 Rate: ₹${zone.priceMin.toLocaleString('en-IN')}–${zone.priceMax.toLocaleString('en-IN')}/sqft (${zone.priceTrend})\n` +

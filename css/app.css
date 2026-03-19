@@ -1,5 +1,5 @@
 /* ===================================
-   ChennaiSafe — App Stylesheet
+   IllamAI — App Stylesheet
    =================================== */
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
@@ -67,25 +67,29 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .brand-icon { font-size: 22px; }
 .brand-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--primary);
+  font-size: 14px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   white-space: nowrap;
 }
 .info-btn {
-  width: 22px; height: 22px;
+  width: 24px; height: 24px;
   border-radius: 50%;
-  border: 1.5px solid var(--primary);
-  background: transparent;
-  color: var(--primary);
-  font-size: 12px; font-weight: 700;
+  border: none;
+  background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+  color: #fff;
+  font-size: 12px; font-weight: 800;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  transition: all 0.15s;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(29,78,216,0.35);
   line-height: 1;
 }
-.info-btn:hover { background: var(--primary); color: #fff; }
+.info-btn:hover { transform: scale(1.12); box-shadow: 0 3px 12px rgba(29,78,216,0.5); }
 
 /* ===== INFO PANEL ===== */
 .info-panel {
@@ -113,19 +117,28 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .info-panel-close {
   position: absolute; top: 12px; right: 14px;
-  background: none; border: none; cursor: pointer;
-  font-size: 16px; color: var(--text-muted);
+  background: rgba(255,255,255,0.15); border: none; cursor: pointer;
+  font-size: 14px; color: rgba(255,255,255,0.85);
   width: 28px; height: 28px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
+  z-index: 1;
 }
-.info-panel-close:hover { background: var(--border); }
-.info-panel-logo { font-size: 36px; text-align: center; margin-bottom: 8px; }
-.info-panel-title { font-size: 17px; font-weight: 800; color: var(--text); text-align: center; margin-bottom: 6px; }
-.info-panel-tagline { font-size: 13px; color: var(--text-muted); text-align: center; line-height: 1.5; margin-bottom: 20px; }
+.info-panel-close:hover { background: rgba(255,255,255,0.25); }
+/* Hero header band inside the modal */
+.info-panel-hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #4f46e5 100%);
+  border-radius: 16px 16px 0 0;
+  margin: -28px -24px 24px;
+  padding: 36px 24px 22px;
+  text-align: center;
+}
+.info-panel-logo { font-size: 44px; text-align: center; margin-bottom: 10px; display: block; }
+.info-panel-title { font-size: 20px; font-weight: 800; color: #fff; text-align: center; margin-bottom: 8px; }
+.info-panel-tagline { font-size: 12.5px; color: rgba(255,255,255,0.82); text-align: center; line-height: 1.55; margin-bottom: 0; }
 .info-panel-sections { display: flex; flex-direction: column; gap: 16px; }
-.info-section-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary); margin-bottom: 8px; }
-.info-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
-.info-list li { font-size: 13px; color: var(--text); line-height: 1.45; }
+.info-section-head { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.info-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.info-list li { font-size: 12.5px; color: var(--text); line-height: 1.5; }
 .info-panel-footer { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); }
 
 .search-container {
@@ -1467,22 +1480,44 @@ body.pin-mode #map { cursor: crosshair !important; }
 /* Tab strip — always visible at the bottom */
 .fb-tab {
   height: var(--filter-bar-h);
-  background: linear-gradient(90deg, #1e3a5f 0%, #1a56db 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 48%, #2563eb 100%);
   display: flex;
   align-items: center;
-  padding: 0 14px;
+  padding: 0 16px;
   cursor: pointer;
   gap: 8px;
   flex-shrink: 0;
   user-select: none;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 -3px 20px rgba(37,99,235,0.38);
+  transition: box-shadow 0.25s;
 }
-.fb-tab-icon { font-size: 15px; flex-shrink: 0; }
+.fb-tab:hover { box-shadow: 0 -3px 26px rgba(37,99,235,0.55); }
+/* Sliding shimmer overlay */
+.fb-tab::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 45%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
+  pointer-events: none;
+  transform: translateX(-120%);
+  animation: fb-shimmer 5s 1.5s infinite linear;
+}
+@keyframes fb-shimmer {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+.fb-tab-icon { font-size: 17px; flex-shrink: 0; }
 .fb-tab-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
   flex-shrink: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .fb-pills-row {
   flex: 1;
@@ -1493,20 +1528,27 @@ body.pin-mode #map { cursor: crosshair !important; }
   min-width: 0;
 }
 .fb-pill {
-  background: rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.13);
+  border: 1px solid rgba(255,255,255,0.28);
   color: #fff;
   font-size: 10.5px;
   font-weight: 500;
-  padding: 2px 7px;
-  border-radius: 10px;
+  padding: 3px 8px;
+  border-radius: 12px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 .fb-chevron {
-  color: rgba(255,255,255,0.85);
-  font-size: 11px;
+  color: rgba(255,255,255,0.9);
+  font-size: 10px;
   flex-shrink: 0;
   transition: transform 0.3s;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  line-height: 1;
 }
 #filter-bar.open .fb-chevron { transform: rotate(180deg); }
 

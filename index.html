@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="description" content="Find your ideal property location in Chennai. Compare rates, commute times, flood risk and facilities before buying." />
-  <title>Find Your Ideal Location in Chennai</title>
+  <meta name="description" content="IllamAI — explore 57+ Chennai neighbourhoods with real data on flood risk, commute times, property prices and liveability scores before buying." />
+  <title>IllamAI — Smart Neighbourhood Guide</title>
 
   <link rel="stylesheet" href="css/leaflet.css" />
   <link rel="stylesheet" href="css/L.Control.Locate.min.css" />
@@ -26,8 +26,8 @@
     </div>
     <div class="ob-card">
       <div class="ob-top">
-        <div class="ob-logo">📍 Find Your Ideal Location</div>
-        <div class="ob-tagline">Compare property rates, commute times &amp; flood risk<br>across Chennai neighbourhoods.</div>
+        <div class="ob-logo">🏠 IllamAI</div>
+        <div class="ob-tagline">Compare property rates, commute times &amp; flood risk<br>across 57+ Chennai neighbourhoods.</div>
         <div class="ob-progress">
           <div class="ob-dot active"></div>
           <div class="ob-dot"></div>
@@ -53,9 +53,9 @@
   ════════════════════════════════════════ -->
   <header id="app-header">
     <div class="header-brand">
-      <span class="brand-icon">📍</span>
-      <span class="brand-name">Find Your Ideal Location</span>
-      <button class="info-btn" id="info-btn" title="About this tool" aria-label="About">ℹ</button>
+      <span class="brand-icon">🏠</span>
+      <span class="brand-name">IllamAI</span>
+      <button class="info-btn" id="info-btn" title="About IllamAI" aria-label="About IllamAI">i</button>
     </div>
 
     <div class="search-container">
@@ -84,32 +84,41 @@
   <div id="info-panel" class="info-panel hidden">
     <div class="info-panel-inner">
       <button class="info-panel-close" id="info-panel-close">✕</button>
-      <div class="info-panel-logo">📍</div>
-      <div class="info-panel-title">Find Your Ideal Location in Chennai</div>
-      <div class="info-panel-tagline">Compare property rates, commute times, flood risk &amp; neighbourhood scores across Chennai before buying.</div>
+      <div class="info-panel-hero">
+        <div class="info-panel-logo">🏠</div>
+        <div class="info-panel-title">IllamAI</div>
+        <div class="info-panel-tagline">Explore 57+ neighbourhoods of Chennai with real data on flood risk, commute times, property prices &amp; liveability — all on one interactive map.</div>
+      </div>
       <div class="info-panel-sections">
         <div class="info-section">
-          <div class="info-section-head">🏠 What You Can Do</div>
+          <div class="info-section-head">🚀 Get Started in 3 Steps</div>
           <ul class="info-list">
-            <li>Browse <strong>zone markers</strong> — colour-coded by composite liveability score</li>
-            <li>Click any zone for flood risk, commute times, transit &amp; nearby facilities</li>
-            <li>Drop a custom pin anywhere on the map for an instant area report</li>
-            <li>Set your preferences in the <strong>Preferences bar</strong> to get personalised Top Picks</li>
-            <li>Toggle flood streams, metro lines, roads &amp; employment hotspots via the Layers menu</li>
+            <li><strong>1. Set preferences</strong> — tap the blue bar at the bottom, pick your budget, commute &amp; lifestyle needs</li>
+            <li><strong>2. Explore the map</strong> — zone markers glow green → yellow → red by liveability; tap any for a full area report</li>
+            <li><strong>3. Get Top Picks</strong> — hit <em>"Show My Best Zones"</em> for a ranked shortlist tailored to you</li>
           </ul>
         </div>
         <div class="info-section">
-          <div class="info-section-head">📊 Data Sources</div>
+          <div class="info-section-head">🗺️ What's on the Map</div>
           <ul class="info-list">
-            <li><strong>Flood risk</strong> — ALOS PALSAR 12.5m DEM stream network</li>
-            <li><strong>Property rates</strong> — TN Registration Dept. guideline values</li>
-            <li><strong>Commute estimates</strong> — Haversine × 1.35 road factor at 20 km/h peak avg</li>
+            <li>Drop a <strong>custom pin</strong> anywhere for an instant flood &amp; area report</li>
+            <li>Toggle <strong>flood streams, metro lines, roads &amp; parks/lakes</strong> via the Layers menu (top-right)</li>
+            <li>Switch basemap between Hybrid satellite, Google Normal or OSM</li>
+            <li>Sort Top Picks by score, commute time or price</li>
+          </ul>
+        </div>
+        <div class="info-section">
+          <div class="info-section-head">📊 Data Behind the Scores</div>
+          <ul class="info-list">
+            <li><strong>Flood risk</strong> — ALOS PALSAR 12.5 m DEM stream network + historical events</li>
+            <li><strong>Property rates</strong> — TN Registration Dept. guideline values (₹/sq ft)</li>
+            <li><strong>Commute</strong> — Haversine × 1.35 road factor at 20 km/h peak average</li>
             <li><strong>Facilities</strong> — OpenStreetMap Overpass API (live query)</li>
-            <li><strong>Metro lines</strong> — CMRL Phase 1, 2 &amp; approved Phase 3 corridors</li>
+            <li><strong>Metro</strong> — CMRL Phase 1, 2 &amp; approved Phase 3 corridors</li>
           </ul>
         </div>
       </div>
-      <div class="info-panel-footer">Built for Chennai home-buyers · Data last updated 2025</div>
+      <div class="info-panel-footer">IllamAI · 57 curated zones + 146 neighbourhoods · Data updated 2025</div>
     </div>
   </div>
 
