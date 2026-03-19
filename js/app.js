@@ -532,6 +532,55 @@ const App = (() => {
       </div>`;
   }
 
+  // ── Overture Maps Integration (optional static file) ───────
+  // Run scripts/fetch_overture_places.py once to generate this file.
+  // When present, Overture counts are merged with OSM Overpass counts.
+  let _overturePlaces = null; // null = not loaded, [] = loaded but empty
+
+  async function loadOverturePlaces() {
+    if (_overturePlaces !== null) return _overturePlaces;
+    try {
+      const resp = await fetch('data/overture-places-chennai.json');
+      if (!resp.ok) { _overturePlaces = []; return []; }
+      const json = await resp.json();
+      _overturePlaces = json.places || [];
+      console.info(`[Overture] Loaded ${_overturePlaces.length} places`);
+    } catch (_) {
+      _overturePlaces = [];
+    }
+    return _overturePlaces;
+  }
+
+  function countOvertureNearby(places, lat, lng, radiusM) {
+    const latDeg = radiusM / 111320;
+    const lngDeg = radiusM / (111320 * Math.cos(lat * Math.PI / 180));
+    const counts = { hospital: 0, school: 0, supermarket: 0, bank: 0, pharmacy: 0, park: 0 };
+    places.forEach(p => {
+      if (Math.abs(p.t - lat) > latDeg || Math.abs(p.g - lng) > lngDeg) return;
+      // Precise haversine check
+      const dlat = (p.t - lat) * Math.PI / 180;
+      const dlng = (p.g - lng) * Math.PI / 180;
+      const a = Math.sin(dlat / 2) ** 2 +
+                Math.cos(lat * Math.PI / 180) * Math.cos(p.t * Math.PI / 180) *
+                Math.sin(dlng / 2) ** 2;
+      const dist = 6371000 * 2 * Math.asin(Math.sqrt(a));
+      if (dist <= radiusM && counts[p.c] !== undefined) counts[p.c]++;
+    });
+    return counts;
+  }
+
+  function mergeCounts(osm, overture) {
+    // Take the max of OSM and Overture for each category (both may undercount)
+    return {
+      hospitals:    Math.max(osm.hospitals,    overture.hospital    || 0),
+      schools:      Math.max(osm.schools,      overture.school      || 0),
+      supermarkets: Math.max(osm.supermarkets, overture.supermarket || 0),
+      banks:        Math.max(osm.banks,        overture.bank        || 0),
+      pharmacies:   Math.max(osm.pharmacies,   overture.pharmacy    || 0),
+      parks:        Math.max(osm.parks,        overture.park        || 0),
+    };
+  }
+
   // ── Facilities via Overpass API ────────────────────────────
   async function loadFacilities(zone) {
     const loadingEl = document.getElementById('facilities-loading');
@@ -560,7 +609,7 @@ const App = (() => {
         const key = a || s || l;
         if (key) counts[key] = (counts[key] || 0) + 1;
       });
-      const data = {
+      const osmData = {
         hospitals: (counts.hospital || 0) + (counts.clinic || 0),
         schools: (counts.school || 0) + (counts.college || 0),
         supermarkets: counts.supermarket || 0,
@@ -568,6 +617,11 @@ const App = (() => {
         pharmacies: counts.pharmacy || 0,
         parks: counts.park || 0,
       };
+      // Optionally merge with Overture Maps if available
+      const overturePlaces = await loadOverturePlaces();
+      const data = overturePlaces.length
+        ? mergeCounts(osmData, countOvertureNearby(overturePlaces, lat, lng, r))
+        : osmData;
       state.facilitiesCache[zone.id] = data;
       renderFacilities(data, loadingEl, gridEl);
     } catch (err) {
@@ -1001,7 +1055,7 @@ const App = (() => {
         const key = el.tags?.amenity || el.tags?.shop || el.tags?.leisure || el.tags?.railway;
         if (key) counts[key] = (counts[key] || 0) + 1;
       });
-      const data = {
+      const osmData = {
         hospitals: (counts.hospital || 0) + (counts.clinic || 0),
         schools: (counts.school || 0) + (counts.college || 0),
         supermarkets: counts.supermarket || 0,
@@ -1009,6 +1063,10 @@ const App = (() => {
         pharmacies: counts.pharmacy || 0,
         parks: counts.park || 0,
       };
+      const overturePlaces = await loadOverturePlaces();
+      const data = overturePlaces.length
+        ? mergeCounts(osmData, countOvertureNearby(overturePlaces, lat, lng, r))
+        : osmData;
       renderFacilities(data, loadingEl, gridEl);
     } catch (_) {
       if (loadingEl) loadingEl.textContent = 'Facilities unavailable (offline)';
