@@ -25,6 +25,8 @@ const App = (() => {
     _pinData: null,
     // OSM locality layer
     localityLayer: null,
+    // Metro layer
+    metroLayer: null,
   };
 
   // ── Onboarding ─────────────────────────────────────────────
@@ -192,16 +194,46 @@ const App = (() => {
   }
 
   function highlightRecommendations() {
-    const topIds = new Set(state.recommendations.slice(0, 3).map(z => z.id));
+    const recoIds = new Set(state.recommendations.map(z => z.id));
+    const top3Ids = new Set(state.recommendations.slice(0, 3).map(z => z.id));
+
     Object.entries(state.zoneMarkers).forEach(([id, marker]) => {
-      const el = marker.getElement();
-      if (!el) return;
-      const circle = el.querySelector('.zone-circle');
-      if (circle) {
-        circle.classList.toggle('top-pick', topIds.has(id));
-        circle.classList.toggle('highlighted', topIds.has(id));
+      // Hide non-recommended zones; show only the matched ones
+      if (recoIds.has(id)) {
+        marker.addTo(state.map);
+        const el = marker.getElement();
+        if (!el) return;
+        const circle = el.querySelector('.zone-circle');
+        if (circle) {
+          circle.classList.toggle('top-pick', top3Ids.has(id));
+          circle.classList.toggle('highlighted', top3Ids.has(id));
+        }
+      } else {
+        state.map.removeLayer(marker);
       }
     });
+
+    // Show "show all zones" chip on the map
+    _showAllZonesChip();
+  }
+
+  function _showAllZonesChip() {
+    let chip = document.getElementById('show-all-zones-chip');
+    if (chip) return; // already showing
+    chip = document.createElement('div');
+    chip.id = 'show-all-zones-chip';
+    chip.className = 'show-all-chip';
+    chip.innerHTML = `
+      <span>Showing <strong>${state.recommendations.length} matched zones</strong></span>
+      <button onclick="App.showAllZones()">Show all zones</button>
+    `;
+    document.body.appendChild(chip);
+  }
+
+  function showAllZones() {
+    Object.values(state.zoneMarkers).forEach(m => m.addTo(state.map));
+    const chip = document.getElementById('show-all-zones-chip');
+    if (chip) chip.remove();
   }
 
   function showRecoPanel() {
@@ -258,20 +290,20 @@ const App = (() => {
       { opacity: 0.65, maxNativeZoom: 20, maxZoom: 28, attribution: '© Google' }
     ).addTo(state.map);
 
-    // DEM overlay
+    // DEM overlay — off by default, user enables via layer panel
     const demBounds = [[12.469166667, 79.55], [13.5625, 80.348333333]];
-    state.demLayer = L.imageOverlay('data/DEM_1.png', demBounds, { opacity: 0.5 }).addTo(state.map);
+    state.demLayer = L.imageOverlay('data/DEM_1.png', demBounds, { opacity: 0.5 });
 
-    // Substreams overlay
+    // Substreams overlay — off by default
     const subBounds = [[12.47325, 79.554116667], [13.55005, 80.345916667]];
-    state.substreamsLayer = L.imageOverlay('data/substreams_2.png', subBounds, { opacity: 0.6 }).addTo(state.map);
+    state.substreamsLayer = L.imageOverlay('data/substreams_2.png', subBounds, { opacity: 0.6 });
 
-    // Stream lines (your flood data)
+    // Stream lines — off by default
     if (streamData) {
       state.streamLayer = L.geoJson(streamData, {
         style: { color: '#001FE7', opacity: 0.65, weight: 3 },
         interactive: false,
-      }).addTo(state.map);
+      });
     }
 
     // Zone markers
@@ -279,6 +311,9 @@ const App = (() => {
 
     // OSM locality discovery (async, non-blocking)
     loadOSMLocalities();
+
+    // Chennai Metro layer (async, non-blocking)
+    loadMetroLayer();
 
     // Click on map → reverse geocode and show nearest zone
     state.map.on('click', onMapClick);
@@ -301,6 +336,10 @@ const App = (() => {
     document.getElementById('toggle-localities').addEventListener('change', e => {
       if (!state.localityLayer) return;
       e.target.checked ? state.localityLayer.addTo(state.map) : state.map.removeLayer(state.localityLayer);
+    });
+    document.getElementById('toggle-metro').addEventListener('change', e => {
+      if (!state.metroLayer) return;
+      e.target.checked ? state.metroLayer.addTo(state.map) : state.map.removeLayer(state.metroLayer);
     });
 
     // FABs
@@ -774,6 +813,67 @@ const App = (() => {
     );
   }
 
+  // ── Chennai Metro Layer ────────────────────────────────────
+  async function loadMetroLayer() {
+    const bbox = '12.87,80.09,13.25,80.34';
+    // Query metro/subway lines and stations from OSM
+    const query =
+      `[out:json][timeout:20];(` +
+      `way["railway"~"subway|light_rail|rail"]["name"~"[Mm]etro|[Cc]hennai"](${bbox});` +
+      `relation["route"~"subway|light_rail"]["name"~"[Mm]etro|[Cc]hennai"](${bbox});` +
+      `node["railway"="station"]["station"~"subway|light_rail"](${bbox});` +
+      `node["railway"="subway_entrance"](${bbox});` +
+      `);out geom tags;`;
+
+    try {
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query),
+      });
+      const json = await resp.json();
+
+      const group = L.layerGroup();
+
+      json.elements.forEach(el => {
+        if (el.type === 'way' && el.geometry) {
+          const latlngs = el.geometry.map(p => [p.lat, p.lon]);
+          L.polyline(latlngs, {
+            color: '#8b5cf6',
+            weight: 4,
+            opacity: 0.85,
+          }).addTo(group);
+        }
+        if (el.type === 'node' && (el.tags?.railway === 'station' || el.tags?.railway === 'subway_entrance')) {
+          const name = el.tags?.name || el.tags?.['name:en'] || 'Metro Station';
+          L.circleMarker([el.lat, el.lon], {
+            radius: 6,
+            color: '#fff',
+            fillColor: '#8b5cf6',
+            fillOpacity: 1,
+            weight: 2,
+          })
+            .bindTooltip(`<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name}</div></div>`, {
+              direction: 'top', className: 'zone-tooltip-wrap',
+            })
+            .addTo(group);
+        }
+      });
+
+      state.metroLayer = group;
+
+      // Auto-add if toggle is checked
+      if (document.getElementById('toggle-metro')?.checked) {
+        group.addTo(state.map);
+      }
+
+      const count = json.elements.filter(e => e.type === 'node').length;
+      const subEl = document.getElementById('metro-sub');
+      if (subEl) subEl.textContent = `${count} stations · Chennai Metro Rail`;
+    } catch (_) {
+      // Non-critical
+    }
+  }
+
   // ── OSM Locality Discovery ─────────────────────────────────
   const OSM_LOCALITY_CACHE_KEY = 'csafe_osm_localities_v2';
   const OSM_LOCALITY_TTL = 24 * 60 * 60 * 1000; // 24h
@@ -807,6 +907,9 @@ const App = (() => {
       });
       const json = await resp.json();
 
+      // Keywords that indicate infrastructure/utility nodes, not residential localities
+      const INFRA_BLOCKLIST = /cmwssb|water\s*board|sewerage|pumping\s*station|oht|overhead\s*tank|reservoir|water\s*tank|borewell|substati|transformer|pylon|power\s*station|garbage|compost|cemetery|burial|cremation|temple\s*tank|storm\s*drain/i;
+
       const localities = json.elements
         .filter(el => el.tags?.name)
         .map(el => ({
@@ -819,6 +922,8 @@ const App = (() => {
           osmId: el.id,
         }))
         .filter(l => l.lat && l.lng)
+        // Drop infrastructure/utility nodes
+        .filter(l => !INFRA_BLOCKLIST.test(l.name))
         // Skip localities already covered by curated zones (within ~1.5km)
         .filter(l => !CHENNAI_ZONES.some(z => Math.hypot(z.lat - l.lat, z.lng - l.lng) < 0.015));
 
@@ -850,7 +955,8 @@ const App = (() => {
       );
       marker.on('click', e => {
         L.DomEvent.stopPropagation(e);
-        openPinProfile(loc.lat, loc.lng);
+        // Use full dropPin pipeline: places pin marker + 3km buffer + flood score + facilities
+        dropPin(loc.lat, loc.lng);
       });
       marker.addTo(state.localityLayer);
     });
@@ -1182,5 +1288,6 @@ const App = (() => {
     openZone: openZoneProfile,
     clearDroppedPin: clearPin,
     sharePinLocation,
+    showAllZones,
   };
 })();

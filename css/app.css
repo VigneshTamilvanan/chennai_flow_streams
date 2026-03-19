@@ -863,6 +863,40 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .zone-circle.top-pick { animation: pulse-ring 2s infinite; }
 
+/* ===== SHOW-ALL-ZONES CHIP ===== */
+.show-all-chip {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1f2937;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  z-index: 700;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  white-space: nowrap;
+}
+.show-all-chip strong { color: #fbbf24; }
+.show-all-chip button {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.2s;
+}
+.show-all-chip button:hover { background: rgba(255,255,255,0.25); }
+
 /* ===== OSM LOCALITY MARKERS ===== */
 .locality-marker {
   width: 26px; height: 26px;
