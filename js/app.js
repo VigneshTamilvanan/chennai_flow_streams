@@ -77,6 +77,12 @@ const App = (() => {
       : Math.round(roadKm / 20 * 60); // auto 20 km/h
   }
 
+  // Major intercity bus terminals — always shown as reference points
+  const MAJOR_BUS_HUBS = [
+    { name: 'Koyambedu CMBT', lat: 13.0694, lng: 80.1948 },
+    { name: 'Kilambakkam', lat: 12.8635, lng: 80.0698 },
+  ];
+
   // Find nearest transit stop of each type for a given lat/lng
   function findNearestTransit(lat, lng) {
     function nearestInList(list) {
@@ -87,10 +93,15 @@ const App = (() => {
       });
       return best ? { ...best, minutes: transitMinutes(best.km) } : null;
     }
+    const busHubs = MAJOR_BUS_HUBS.map(h => {
+      const km = haversineKm(lat, lng, h.lat, h.lng);
+      return { ...h, km, minutes: transitMinutes(km) };
+    });
     return {
       metro: nearestInList(state.metroStations),
       suburban: nearestInList(state.suburbStations),
-      bus: nearestInList(state.busTermini),
+      busNearest: nearestInList(state.busTermini),
+      busHubs,
     };
   }
 
@@ -561,7 +572,6 @@ const App = (() => {
             `<div class="zone-tooltip"><div class="zone-tooltip-name">🚉 ${name}</div></div>`,
             { direction: 'top', className: 'zone-tooltip-wrap' }
           )
-          .bindPopup(`<div style="font-size:13px;font-weight:600;padding:2px 0">🚉 ${name}</div>`, { maxWidth: 180 })
           .addTo(state.suburbanLayer);
         });
       }
@@ -585,10 +595,6 @@ const App = (() => {
           layer.bindTooltip(
             `<div class="zone-tooltip"><div class="zone-tooltip-name">🚌 ${name}</div></div>`,
             { direction: 'top', className: 'zone-tooltip-wrap', permanent: false }
-          );
-          layer.bindPopup(
-            `<div style="font-size:13px;font-weight:600;padding:2px 0">🚌 ${name}</div>`,
-            { maxWidth: 200 }
           );
         },
       });
@@ -882,39 +888,25 @@ const App = (() => {
     const fmtTime = min => min < 60 ? `~${min} min` : `~${Math.round(min / 6) / 10}h`;
     const modeLabel = km => km <= 1.5 ? 'walk' : 'auto';
 
-    if (nearby.metro) {
-      const { name, km, minutes } = nearby.metro;
-      rows.push(`
-        <div class="commute-row">
-          <div class="commute-dest"><span class="commute-dest-icon">🚇</span> ${name}</div>
-          <div class="commute-time" style="flex-direction:column;align-items:flex-end;gap:0">
-            <span>${fmtTime(minutes)}</span>
-            <span style="font-size:10px;color:#9ca3af">${fmtDist(km)} ${modeLabel(km)}</span>
-          </div>
-        </div>`);
-    }
-    if (nearby.suburban) {
-      const { name, km, minutes } = nearby.suburban;
-      rows.push(`
-        <div class="commute-row">
-          <div class="commute-dest"><span class="commute-dest-icon">🚉</span> ${name}</div>
-          <div class="commute-time" style="flex-direction:column;align-items:flex-end;gap:0">
-            <span>${fmtTime(minutes)}</span>
-            <span style="font-size:10px;color:#9ca3af">${fmtDist(km)} ${modeLabel(km)}</span>
-          </div>
-        </div>`);
-    }
-    if (nearby.bus) {
-      const { name, km, minutes } = nearby.bus;
-      rows.push(`
-        <div class="commute-row">
-          <div class="commute-dest"><span class="commute-dest-icon">🚌</span> ${name}</div>
-          <div class="commute-time" style="flex-direction:column;align-items:flex-end;gap:0">
-            <span>${fmtTime(minutes)}</span>
-            <span style="font-size:10px;color:#9ca3af">${fmtDist(km)} ${modeLabel(km)}</span>
-          </div>
-        </div>`);
-    }
+    const mkRow = (icon, name, km, minutes) => `
+      <div class="commute-row">
+        <div class="commute-dest"><span class="commute-dest-icon">${icon}</span> ${name}</div>
+        <div class="commute-time" style="flex-direction:column;align-items:flex-end;gap:0">
+          <span>${fmtTime(minutes)}</span>
+          <span style="font-size:10px;color:#9ca3af">${fmtDist(km)} ${modeLabel(km)}</span>
+        </div>
+      </div>`;
+
+    if (nearby.metro) rows.push(mkRow('🚇', nearby.metro.name, nearby.metro.km, nearby.metro.minutes));
+    if (nearby.suburban) rows.push(mkRow('🚉', nearby.suburban.name, nearby.suburban.km, nearby.suburban.minutes));
+
+    // Nearest local terminus (if different from major hubs)
+    if (nearby.busNearest) rows.push(mkRow('🚌', nearby.busNearest.name, nearby.busNearest.km, nearby.busNearest.minutes));
+
+    // Always show Koyambedu + Kilambakkam
+    nearby.busHubs.forEach(h => {
+      rows.push(mkRow('🏢', h.name, h.km, h.minutes));
+    });
 
     return rows.length
       ? rows.join('')
@@ -1233,7 +1225,6 @@ const App = (() => {
       `way["railway"~"subway|light_rail|rail"]["name"~"[Mm]etro|[Cc]hennai"](${bbox});` +
       `relation["route"~"subway|light_rail"]["name"~"[Mm]etro|[Cc]hennai"](${bbox});` +
       `node["railway"="station"]["station"~"subway|light_rail"](${bbox});` +
-      `node["railway"="subway_entrance"](${bbox});` +
       `);out geom tags;`;
 
     try {
@@ -1248,9 +1239,8 @@ const App = (() => {
           const latlngs = el.geometry.map(p => [p.lat, p.lon]);
           L.polyline(latlngs, { color: '#8b5cf6', weight: 4, opacity: 0.85 }).addTo(group);
         }
-        if (el.type === 'node' && (el.tags?.railway === 'station' || el.tags?.railway === 'subway_entrance')) {
+        if (el.type === 'node' && el.tags?.railway === 'station') {
           const rawName = el.tags?.name || el.tags?.['name:en'] || '';
-          // Skip malformed/single-char OSM entries
           if (rawName.length < 3) return;
           const name = rawName;
           state.metroStations.push({ name, lat: el.lat, lng: el.lon, phase: 1 });
