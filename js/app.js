@@ -74,6 +74,16 @@ const App = (() => {
         { icon: "🟠", label: "₹7,000 – ₹12,000", sub: "Premium mid", val: "7k-12k" },
         { icon: "🔴", label: "Above ₹12,000", sub: "Premium", val: "above-12k" },
       ]
+    },
+    {
+      q: "Max commute time you're comfortable with?",
+      key: "commute_tolerance",
+      options: [
+        { icon: "⚡", label: "Under 20 min", sub: "Live close to work", val: "under-20" },
+        { icon: "🚶", label: "20 – 40 min", sub: "Short commute", val: "20-40" },
+        { icon: "🚌", label: "40 – 60 min", sub: "Acceptable if area is good", val: "40-60" },
+        { icon: "🕐", label: "Over 60 min", sub: "Commute is not a priority", val: "over-60" },
+      ]
     }
   ];
 
@@ -186,6 +196,15 @@ const App = (() => {
       if (persona.priority === 'metro' && zone.metroDistance <= 0.5) { score += 25; reasons.push('Metro within 500m'); }
       if (persona.priority === 'schools' && zone.scores.schools >= 80) { score += 25; reasons.push('Top-rated schools'); }
       if (persona.priority === 'greenery' && zone.scores.greenery >= 70) { score += 25; reasons.push('Green & open'); }
+
+      // Commute tolerance
+      if (workKey && zone.commute[workKey] !== undefined) {
+        const t = zone.commute[workKey];
+        if (persona.commute_tolerance === 'under-20' && t > 20) score -= 15;
+        if (persona.commute_tolerance === '20-40' && t > 40) score -= 10;
+        if (persona.commute_tolerance === 'under-20' && t <= 20) { score += 15; reasons.push(`Only ~${t} min commute`); }
+        if (persona.commute_tolerance === '20-40' && t <= 40) score += 8;
+      }
 
       return { ...zone, matchScore: score, reasons };
     });
@@ -936,7 +955,8 @@ const App = (() => {
 
   function renderLocalityMarkers(localities) {
     if (state.localityLayer) state.map.removeLayer(state.localityLayer);
-    state.localityLayer = L.layerGroup().addTo(state.map);
+    const showLocalities = document.getElementById('toggle-localities')?.checked ?? false;
+    state.localityLayer = showLocalities ? L.layerGroup().addTo(state.map) : L.layerGroup();
 
     localities.forEach(loc => {
       const initials = loc.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
