@@ -27,6 +27,14 @@ const App = (() => {
     localityLayer: null,
     // Metro layer
     metroLayer: null,
+    // Road layers
+    orrLayer: null,
+    irrLayer: null,
+    nhLayer: null,
+    suburbanLayer: null,
+    busTerminusLayer: null,
+    // Custom work location (from survey text input)
+    customWorkLoc: null,  // { lat, lng, name }
   };
 
   // ── Haversine travel-time helper ───────────────────────────
@@ -47,7 +55,10 @@ const App = (() => {
   }
 
   // Pre-compute commute minutes from each zone to each work hub
-  function getCommute(zone, workKey) {
+  function getCommute(zone, workKey, customLat, customLng) {
+    if (workKey === 'custom' && customLat != null) {
+      return commuteMinutes(zone.lat, zone.lng, customLat, customLng);
+    }
     const hub = typeof WORK_ZONES !== 'undefined' && WORK_ZONES[workKey];
     if (!hub) return zone.commute?.[workKey] ?? null;
     return commuteMinutes(zone.lat, zone.lng, hub.lat, hub.lng);
@@ -58,6 +69,7 @@ const App = (() => {
     {
       q: "Where do you work?",
       key: "work",
+      hasLocationSearch: true,
       options: [
         { icon: "💻", label: "IT / Tech", sub: "OMR, Tidel, Sholinganallur", val: "omr" },
         { icon: "🏭", label: "Manufacturing", sub: "Ambattur, Sriperumbudur, Guindy", val: "ambattur" },
@@ -138,12 +150,52 @@ const App = (() => {
       `;
       btn.addEventListener('click', () => {
         obAnswers[step.key] = opt.val;
+        // Clear custom work location when a preset is chosen
+        if (step.hasLocationSearch) {
+          state.customWorkLoc = null;
+          const input = document.getElementById('ob-work-search');
+          if (input) input.value = '';
+          const drop = document.getElementById('ob-work-dropdown');
+          if (drop) drop.innerHTML = '';
+        }
         grid.querySelectorAll('.ob-option').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
         document.getElementById('ob-next').disabled = false;
       });
       grid.appendChild(btn);
     });
+
+    // Custom location search box (work step only)
+    if (step.hasLocationSearch) {
+      const searchWrap = document.createElement('div');
+      searchWrap.className = 'ob-location-search';
+      const savedName = state.customWorkLoc?.name || '';
+      const savedSelected = obAnswers[step.key] === 'custom';
+      searchWrap.innerHTML = `
+        <div class="ob-location-label">— or type your exact workplace —</div>
+        <div class="ob-location-input-wrap">
+          <input id="ob-work-search" type="text" placeholder="e.g. DLF IT Park, Perungudi…"
+            value="${savedName}"
+            class="${savedSelected ? 'ob-location-selected' : ''}"
+            autocomplete="off" spellcheck="false"/>
+        </div>
+        <div id="ob-work-dropdown" class="ob-work-dropdown"></div>
+      `;
+      grid.appendChild(searchWrap);
+
+      const input = searchWrap.querySelector('#ob-work-search');
+      const dropEl = searchWrap.querySelector('#ob-work-dropdown');
+      let searchTimer = null;
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim();
+        input.classList.remove('ob-location-selected');
+        clearTimeout(searchTimer);
+        dropEl.innerHTML = '';
+        if (q.length < 2) return;
+        searchTimer = setTimeout(() => obWorkNominatimSearch(q, input, dropEl), 400);
+      });
+    }
 
     // Progress dots
     document.querySelectorAll('.ob-dot').forEach((dot, i) => {
@@ -157,6 +209,35 @@ const App = (() => {
     const nextBtn = document.getElementById('ob-next');
     nextBtn.disabled = !obAnswers[step.key];
     nextBtn.textContent = obStep === OB_STEPS.length - 1 ? 'Show My Matches →' : 'Next →';
+  }
+
+  async function obWorkNominatimSearch(q, input, dropEl) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', Chennai, India')}&format=json&limit=4&accept-language=en`;
+      const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      const results = await resp.json();
+      dropEl.innerHTML = '';
+      results.slice(0, 4).forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'ob-work-result';
+        const name = r.display_name.split(',')[0];
+        const sub = r.display_name.split(',').slice(1, 3).join(',').trim();
+        item.innerHTML = `<span class="ob-work-result-name">${name}</span><span class="ob-work-result-sub">${sub}</span>`;
+        item.addEventListener('click', () => {
+          state.customWorkLoc = { lat: parseFloat(r.lat), lng: parseFloat(r.lon), name };
+          obAnswers[OB_STEPS[obStep].key] = 'custom';
+          input.value = name;
+          input.classList.add('ob-location-selected');
+          dropEl.innerHTML = '';
+          // Deselect option buttons
+          document.querySelectorAll('#ob-options .ob-option').forEach(b => b.classList.remove('selected'));
+          document.getElementById('ob-next').disabled = false;
+        });
+        dropEl.appendChild(item);
+      });
+    } catch (_) {
+      // Network fail — silently ignore
+    }
   }
 
   function prevObStep() {
@@ -212,7 +293,9 @@ const App = (() => {
 
       // Work proximity (haversine-computed)
       const workKey = persona.work === 'wfh' || persona.work === 'other' ? null : persona.work;
-      const tWork = workKey ? getCommute(zone, workKey) : null;
+      const customLat = workKey === 'custom' ? state.customWorkLoc?.lat : null;
+      const customLng = workKey === 'custom' ? state.customWorkLoc?.lng : null;
+      const tWork = workKey ? getCommute(zone, workKey, customLat, customLng) : null;
       if (tWork !== null) {
         if (tWork <= 15) { score += 30; reasons.push(`~${tWork} min to work`); }
         else if (tWork <= 25) { score += 20; reasons.push(`~${tWork} min to work`); }
@@ -392,6 +475,50 @@ const App = (() => {
       });
     }
 
+    // Road network layers — off by default
+    if (typeof json_ORR_21 !== 'undefined') {
+      state.orrLayer = L.geoJson(json_ORR_21, {
+        style: { color: '#f97316', weight: 3.5, opacity: 0.85 },
+        interactive: false,
+      });
+    }
+    if (typeof json_IRR_18 !== 'undefined') {
+      state.irrLayer = L.geoJson(json_IRR_18, {
+        style: { color: '#eab308', weight: 3, opacity: 0.85 },
+        interactive: false,
+      });
+    }
+    if (typeof json_NH_16 !== 'undefined') {
+      state.nhLayer = L.geoJson(json_NH_16, {
+        style: { color: '#dc2626', weight: 2.5, opacity: 0.8 },
+        interactive: false,
+      });
+    }
+    if (typeof json_SuburbanCorridor_2 !== 'undefined') {
+      state.suburbanLayer = L.geoJson(json_SuburbanCorridor_2, {
+        style: { color: '#92400e', weight: 3, opacity: 0.85, dashArray: '8 4' },
+        interactive: false,
+      });
+    }
+    if (typeof json_MajorBusTerminus_1 !== 'undefined') {
+      state.busTerminusLayer = L.geoJson(json_MajorBusTerminus_1, {
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+          radius: 7,
+          color: '#fff',
+          fillColor: '#0d9488',
+          fillOpacity: 0.9,
+          weight: 2,
+        }),
+        onEachFeature: (feature, layer) => {
+          const name = feature.properties?.name || feature.properties?.Name || 'Bus Terminus';
+          layer.bindTooltip(
+            `<div class="zone-tooltip"><div class="zone-tooltip-name">🚌 ${name}</div></div>`,
+            { direction: 'top', className: 'zone-tooltip-wrap' }
+          );
+        },
+      });
+    }
+
     // Zone markers
     addZoneMarkers();
 
@@ -426,6 +553,26 @@ const App = (() => {
     document.getElementById('toggle-metro').addEventListener('change', e => {
       if (!state.metroLayer) return;
       e.target.checked ? state.metroLayer.addTo(state.map) : state.map.removeLayer(state.metroLayer);
+    });
+    document.getElementById('toggle-orr').addEventListener('change', e => {
+      if (!state.orrLayer) return;
+      e.target.checked ? state.orrLayer.addTo(state.map) : state.map.removeLayer(state.orrLayer);
+    });
+    document.getElementById('toggle-irr').addEventListener('change', e => {
+      if (!state.irrLayer) return;
+      e.target.checked ? state.irrLayer.addTo(state.map) : state.map.removeLayer(state.irrLayer);
+    });
+    document.getElementById('toggle-nh').addEventListener('change', e => {
+      if (!state.nhLayer) return;
+      e.target.checked ? state.nhLayer.addTo(state.map) : state.map.removeLayer(state.nhLayer);
+    });
+    document.getElementById('toggle-suburban').addEventListener('change', e => {
+      if (!state.suburbanLayer) return;
+      e.target.checked ? state.suburbanLayer.addTo(state.map) : state.map.removeLayer(state.suburbanLayer);
+    });
+    document.getElementById('toggle-bus-terminus').addEventListener('change', e => {
+      if (!state.busTerminusLayer) return;
+      e.target.checked ? state.busTerminusLayer.addTo(state.map) : state.map.removeLayer(state.busTerminusLayer);
     });
 
     // FABs
@@ -532,22 +679,7 @@ const App = (() => {
         ${zone.district} · ${zone.elevation} elevation
       </div>
 
-      <!-- Flood Safety -->
-      <div class="flood-block risk-${zone.floodTier}">
-        <div class="flood-label">🌊 Flood Safety Score</div>
-        <div class="flood-tier-badge risk-${zone.floodTier}">
-          ${floodTierLabel(zone.floodTier)}
-          <span style="font-size:13px;font-weight:400;opacity:0.7">&nbsp;${blendedScore}/100</span>
-        </div>
-        <div class="flood-score-bar">
-          <div class="flood-score-fill" style="width:${blendedScore}%"></div>
-        </div>
-        <div class="flood-note">${zone.floodNote}</div>
-        ${zone.floodEvents.length ? `<div class="flood-events">⚠️ Flooded: ${zone.floodEvents.join(', ')}</div>` : ''}
-        ${streamNote ? `<div class="flood-events" style="color:inherit;opacity:0.65">📍 ${streamNote}</div>` : ''}
-      </div>
-
-      <!-- Property Rates -->
+      <!-- Property Rates — lead with what buyers care about -->
       <div class="profile-section">
         <div class="section-label">Property Rates</div>
         <div class="price-display">₹${zone.priceMin.toLocaleString('en-IN')} – ₹${zone.priceMax.toLocaleString('en-IN')}<span style="font-size:13px;font-weight:400"> /sqft</span></div>
@@ -563,7 +695,7 @@ const App = (() => {
         ${renderCommuteRows(zone, workKey)}
       </div>
 
-      <!-- Metro -->
+      <!-- Transit -->
       <div class="profile-section">
         <div class="section-label">Transit</div>
         <div class="commute-row">
@@ -591,7 +723,6 @@ const App = (() => {
           ${renderScoreItem(zone.scores.amenities, 'Amenities')}
           ${renderScoreItem(zone.scores.schools, 'Schools')}
           ${renderScoreItem(zone.scores.greenery, 'Greenery')}
-          ${renderScoreItem(zone.scores.safety, 'Flood Safety')}
           ${renderScoreItem(zone.scores.value, 'Value')}
         </div>
       </div>
@@ -606,6 +737,21 @@ const App = (() => {
         <div class="tags-row">
           ${zone.concerns.map(c => `<span class="profile-tag tag-concern">⚠ ${c}</span>`).join('')}
         </div>
+      </div>
+
+      <!-- Flood Risk — context, not the headline -->
+      <div class="flood-block risk-${zone.floodTier}" style="margin-top:4px">
+        <div class="flood-label">🛡️ Flood Risk Assessment</div>
+        <div class="flood-tier-badge risk-${zone.floodTier}">
+          ${floodTierLabel(zone.floodTier)}
+          <span style="font-size:13px;font-weight:400;opacity:0.7">&nbsp;${blendedScore}/100</span>
+        </div>
+        <div class="flood-score-bar">
+          <div class="flood-score-fill" style="width:${blendedScore}%"></div>
+        </div>
+        <div class="flood-note">${zone.floodNote}</div>
+        ${zone.floodEvents.length ? `<div class="flood-events">⚠️ Flooded: ${zone.floodEvents.join(', ')}</div>` : ''}
+        ${streamNote ? `<div class="flood-events" style="color:inherit;opacity:0.65">📍 ${streamNote}</div>` : ''}
       </div>
 
       <!-- Actions -->
@@ -638,7 +784,17 @@ const App = (() => {
       { key: 'tnagar', icon: '🛍️', label: 'T Nagar' },
       { key: 'central', icon: '🏛️', label: 'Central / Egmore' },
     ];
-    return destinations.map(dest => {
+    let rows = '';
+    // If user typed a custom work location, show it first highlighted
+    if (highlightKey === 'custom' && state.customWorkLoc) {
+      const t = getCommute(zone, 'custom', state.customWorkLoc.lat, state.customWorkLoc.lng);
+      rows += `
+        <div class="commute-row">
+          <div class="commute-dest"><span class="commute-dest-icon">📍</span> ${state.customWorkLoc.name}</div>
+          <div class="commute-time highlighted">~${t} min</div>
+        </div>`;
+    }
+    rows += destinations.map(dest => {
       const t = getCommute(zone, dest.key);
       const isHighlighted = dest.key === highlightKey;
       return `
@@ -647,6 +803,7 @@ const App = (() => {
           <div class="commute-time ${isHighlighted ? 'highlighted' : ''}">~${t} min</div>
         </div>`;
     }).join('');
+    return rows;
   }
 
   function renderScoreItem(val, label) {

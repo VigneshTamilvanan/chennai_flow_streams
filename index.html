@@ -22,7 +22,7 @@
     <div class="ob-card">
       <div class="ob-top">
         <div class="ob-logo">🌊 ChennaiSafe</div>
-        <div class="ob-tagline">Check flood risk, rates & commute before you buy.<br>Not just a map — a decision tool.</div>
+        <div class="ob-tagline">Find your ideal property in Chennai.<br>Compare rates, commute times &amp; flood risk.</div>
         <div class="ob-progress">
           <div class="ob-dot active"></div>
           <div class="ob-dot"></div>
@@ -196,6 +196,46 @@
         <span class="layer-item-sub" id="metro-sub">Loading Chennai Metro…</span>
       </span>
     </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-orr" />
+      <span class="layer-dot" style="background:#f97316"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Outer Ring Road</span>
+        <span class="layer-item-sub">ORR connectivity</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-irr" />
+      <span class="layer-dot" style="background:#eab308"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Inner Ring Road</span>
+        <span class="layer-item-sub">IRR connectivity</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-nh" />
+      <span class="layer-dot" style="background:#dc2626"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">National Highway</span>
+        <span class="layer-item-sub">NH road network</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-suburban" />
+      <span class="layer-dot" style="background:#92400e"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Suburban Rail</span>
+        <span class="layer-item-sub">MRTS / suburban corridors</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-bus-terminus" />
+      <span class="layer-dot" style="background:#0d9488;border-radius:50%"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Bus Terminus</span>
+        <span class="layer-item-sub">Major MTC bus depots</span>
+      </span>
+    </label>
   </div>
 
   <!-- ═══════════════════════════════════════
@@ -204,6 +244,11 @@
   <script src="js/leaflet.js"></script>
   <script src="js/Autolinker.min.js"></script>
   <script src="data/streams_line_3.js"></script>
+  <script src="data/road_orr.js"></script>
+  <script src="data/road_irr.js"></script>
+  <script src="data/road_nh.js"></script>
+  <script src="data/road_suburban.js"></script>
+  <script src="data/road_bus_terminus.js"></script>
   <script src="data/chennai-data.js"></script>
   <script src="js/flood-score.js"></script>
   <script src="js/app.js"></script>
