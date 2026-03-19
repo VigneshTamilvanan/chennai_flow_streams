@@ -33,6 +33,10 @@ const App = (() => {
     nhLayer: null,
     suburbanLayer: null,
     busTerminusLayer: null,
+    // Transit station data for nearest-transit lookups
+    metroStations: [],    // [{name, lat, lng, phase}]
+    suburbStations: [],   // [{name, lat, lng}]
+    busTermini: [],       // [{name, lat, lng}]
     // Custom work location (from survey text input)
     customWorkLoc: null,  // { lat, lng, name }
   };
@@ -52,6 +56,42 @@ const App = (() => {
     const roadKm = distKm * 1.35;   // straight-line → road distance factor
     const speedKmh = 20;            // Chennai peak-hour average
     return Math.round(roadKm / speedKmh * 60);
+  }
+
+  // Straight-line km between two coords
+  function haversineKm(lat1, lng1, lat2, lng2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // Estimate travel time to a transit stop (walk ≤1.5km, else auto)
+  function transitMinutes(km) {
+    const roadKm = km * 1.35;
+    return km <= 1.5
+      ? Math.round(roadKm / 5 * 60)   // walking 5 km/h
+      : Math.round(roadKm / 20 * 60); // auto 20 km/h
+  }
+
+  // Find nearest transit stop of each type for a given lat/lng
+  function findNearestTransit(lat, lng) {
+    function nearestInList(list) {
+      let best = null, bestKm = Infinity;
+      list.forEach(s => {
+        const km = haversineKm(lat, lng, s.lat, s.lng);
+        if (km < bestKm) { bestKm = km; best = { ...s, km }; }
+      });
+      return best ? { ...best, minutes: transitMinutes(best.km) } : null;
+    }
+    return {
+      metro: nearestInList(state.metroStations),
+      suburban: nearestInList(state.suburbStations),
+      bus: nearestInList(state.busTermini),
+    };
   }
 
   // Pre-compute commute minutes from each zone to each work hub
@@ -494,11 +534,37 @@ const App = (() => {
         interactive: false,
       });
     }
-    if (typeof json_SuburbanCorridor_2 !== 'undefined') {
-      state.suburbanLayer = L.geoJson(json_SuburbanCorridor_2, {
-        style: { color: '#92400e', weight: 3, opacity: 0.85, dashArray: '8 4' },
-        interactive: false,
-      });
+    if (typeof json_SuburbanCorridor_2 !== 'undefined' || typeof json_SuburbanStations_3 !== 'undefined') {
+      state.suburbanLayer = L.layerGroup();
+      // Corridor lines
+      if (typeof json_SuburbanCorridor_2 !== 'undefined') {
+        L.geoJson(json_SuburbanCorridor_2, {
+          style: { color: '#92400e', weight: 3, opacity: 0.85, dashArray: '8 4' },
+          interactive: false,
+        }).addTo(state.suburbanLayer);
+      }
+      // Stations
+      if (typeof json_SuburbanStations_3 !== 'undefined') {
+        json_SuburbanStations_3.features.forEach(f => {
+          if (f.geometry?.type !== 'Point') return;
+          const [lng2, lat2] = f.geometry.coordinates;
+          const name = (f.properties?.Name || 'Suburban Station').trim();
+          state.suburbStations.push({ name, lat: lat2, lng: lng2 });
+          L.circleMarker([lat2, lng2], {
+            radius: 5,
+            color: '#fff',
+            fillColor: '#92400e',
+            fillOpacity: 0.9,
+            weight: 1.5,
+          })
+          .bindTooltip(
+            `<div class="zone-tooltip"><div class="zone-tooltip-name">🚉 ${name}</div></div>`,
+            { direction: 'top', className: 'zone-tooltip-wrap' }
+          )
+          .bindPopup(`<div style="font-size:13px;font-weight:600;padding:2px 0">🚉 ${name}</div>`, { maxWidth: 180 })
+          .addTo(state.suburbanLayer);
+        });
+      }
     }
     if (typeof json_MajorBusTerminus_1 !== 'undefined') {
       state.busTerminusLayer = L.geoJson(json_MajorBusTerminus_1, {
@@ -510,10 +576,19 @@ const App = (() => {
           weight: 2,
         }),
         onEachFeature: (feature, layer) => {
-          const name = feature.properties?.name || feature.properties?.Name || 'Bus Terminus';
+          const name = (feature.properties?.['Name of th'] || feature.properties?.Name || 'Bus Terminus').trim();
+          // Store for nearest-transit lookup
+          if (feature.geometry?.type === 'Point') {
+            const [lng2, lat2] = feature.geometry.coordinates;
+            state.busTermini.push({ name, lat: lat2, lng: lng2 });
+          }
           layer.bindTooltip(
             `<div class="zone-tooltip"><div class="zone-tooltip-name">🚌 ${name}</div></div>`,
-            { direction: 'top', className: 'zone-tooltip-wrap' }
+            { direction: 'top', className: 'zone-tooltip-wrap', permanent: false }
+          );
+          layer.bindPopup(
+            `<div style="font-size:13px;font-weight:600;padding:2px 0">🚌 ${name}</div>`,
+            { maxWidth: 200 }
           );
         },
       });
@@ -697,15 +772,8 @@ const App = (() => {
 
       <!-- Transit -->
       <div class="profile-section">
-        <div class="section-label">Transit</div>
-        <div class="commute-row">
-          <div class="commute-dest"><span class="commute-dest-icon">🚇</span> ${zone.metro}</div>
-          <div class="commute-time">${zone.metroDistance < 1 ? zone.metroDistance * 1000 + 'm' : zone.metroDistance + 'km'}</div>
-        </div>
-        <div class="commute-row">
-          <div class="commute-dest"><span class="commute-dest-icon">🚌</span> Bus</div>
-          <div class="commute-time">${zone.bus}</div>
-        </div>
+        <div class="section-label">Nearest Transit</div>
+        ${renderNearestTransit(zone.lat, zone.lng)}
       </div>
 
       <!-- Facilities (loaded async) -->
@@ -804,6 +872,53 @@ const App = (() => {
         </div>`;
     }).join('');
     return rows;
+  }
+
+  function renderNearestTransit(lat, lng) {
+    const nearby = findNearestTransit(lat, lng);
+    const rows = [];
+
+    const fmtDist = km => km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
+    const fmtTime = min => min < 60 ? `~${min} min` : `~${Math.round(min / 6) / 10}h`;
+    const modeLabel = km => km <= 1.5 ? 'walk' : 'auto';
+
+    if (nearby.metro) {
+      const { name, km, minutes } = nearby.metro;
+      rows.push(`
+        <div class="commute-row">
+          <div class="commute-dest"><span class="commute-dest-icon">🚇</span> ${name}</div>
+          <div class="commute-time" style="flex-direction:column;align-items:flex-end;gap:0">
+            <span>${fmtTime(minutes)}</span>
+            <span style="font-size:10px;color:#9ca3af">${fmtDist(km)} ${modeLabel(km)}</span>
+          </div>
+        </div>`);
+    }
+    if (nearby.suburban) {
+      const { name, km, minutes } = nearby.suburban;
+      rows.push(`
+        <div class="commute-row">
+          <div class="commute-dest"><span class="commute-dest-icon">🚉</span> ${name}</div>
+          <div class="commute-time" style="flex-direction:column;align-items:flex-end;gap:0">
+            <span>${fmtTime(minutes)}</span>
+            <span style="font-size:10px;color:#9ca3af">${fmtDist(km)} ${modeLabel(km)}</span>
+          </div>
+        </div>`);
+    }
+    if (nearby.bus) {
+      const { name, km, minutes } = nearby.bus;
+      rows.push(`
+        <div class="commute-row">
+          <div class="commute-dest"><span class="commute-dest-icon">🚌</span> ${name}</div>
+          <div class="commute-time" style="flex-direction:column;align-items:flex-end;gap:0">
+            <span>${fmtTime(minutes)}</span>
+            <span style="font-size:10px;color:#9ca3af">${fmtDist(km)} ${modeLabel(km)}</span>
+          </div>
+        </div>`);
+    }
+
+    return rows.length
+      ? rows.join('')
+      : `<div style="color:#9ca3af;font-size:12px">Enable transit layers to see nearest stops</div>`;
   }
 
   function renderScoreItem(val, label) {
@@ -1058,8 +1173,61 @@ const App = (() => {
 
   // ── Chennai Metro Layer ────────────────────────────────────
   async function loadMetroLayer() {
+    const group = L.layerGroup();
+    state.metroLayer = group;
+
+    // ── Phase 2 lines + stations (local files — immediate) ──
+    const PH2_LINE_VARS = [
+      typeof json_MadhavaramtoSholinganallur_4 !== 'undefined' ? json_MadhavaramtoSholinganallur_4 : null,
+      typeof json_LighthousetoPoonamalleeMetro_6 !== 'undefined' ? json_LighthousetoPoonamalleeMetro_6 : null,
+      typeof json_MadhavaramtoSIPCOTMetro_8 !== 'undefined' ? json_MadhavaramtoSIPCOTMetro_8 : null,
+      typeof json_AirporttoWimcoNagarMetro_10 !== 'undefined' ? json_AirporttoWimcoNagarMetro_10 : null,
+      typeof json_StThomasMounttoCentralMetro_12 !== 'undefined' ? json_StThomasMounttoCentralMetro_12 : null,
+    ].filter(Boolean);
+
+    PH2_LINE_VARS.forEach(data => {
+      L.geoJson(data, {
+        style: { color: '#8b5cf6', weight: 3.5, opacity: 0.75, dashArray: '7 4' },
+        interactive: false,
+      }).addTo(group);
+    });
+
+    const PH2_STN_VARS = [
+      typeof json_MadhavaramtoSholinganallurStations_5 !== 'undefined' ? json_MadhavaramtoSholinganallurStations_5 : null,
+      typeof json_LighthousetoPoonamalleeMetroStations_7 !== 'undefined' ? json_LighthousetoPoonamalleeMetroStations_7 : null,
+      typeof json_MadhavaramtoSIPCOTMetroStations_9 !== 'undefined' ? json_MadhavaramtoSIPCOTMetroStations_9 : null,
+      typeof json_AirporttoWimcoNagarMetroStations_11 !== 'undefined' ? json_AirporttoWimcoNagarMetroStations_11 : null,
+      typeof json_StThomasMounttoCentralMetroStations_13 !== 'undefined' ? json_StThomasMounttoCentralMetroStations_13 : null,
+    ].filter(Boolean);
+
+    PH2_STN_VARS.forEach(data => {
+      data.features.forEach(f => {
+        if (f.geometry?.type !== 'Point') return;
+        const [lng2, lat2] = f.geometry.coordinates;
+        const name = (f.properties?.Name || 'Metro Stop').trim();
+        state.metroStations.push({ name, lat: lat2, lng: lng2, phase: 2 });
+        L.circleMarker([lat2, lng2], {
+          radius: 4,
+          color: '#fff',
+          fillColor: '#a78bfa',
+          fillOpacity: 0.9,
+          weight: 1.5,
+        })
+        .bindTooltip(
+          `<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name} <span style="opacity:0.6;font-size:10px">(Ph.2)</span></div></div>`,
+          { direction: 'top', className: 'zone-tooltip-wrap' }
+        )
+        .addTo(group);
+      });
+    });
+
+    // Show Phase 2 immediately if toggle is on
+    if (document.getElementById('toggle-metro')?.checked) {
+      group.addTo(state.map);
+    }
+
+    // ── Phase 1 lines + stations (Overpass — async) ──
     const bbox = '12.87,80.09,13.25,80.34';
-    // Query metro/subway lines and stations from OSM
     const query =
       `[out:json][timeout:20];(` +
       `way["railway"~"subway|light_rail|rail"]["name"~"[Mm]etro|[Cc]hennai"](${bbox});` +
@@ -1075,45 +1243,30 @@ const App = (() => {
       });
       const json = await resp.json();
 
-      const group = L.layerGroup();
-
       json.elements.forEach(el => {
         if (el.type === 'way' && el.geometry) {
           const latlngs = el.geometry.map(p => [p.lat, p.lon]);
-          L.polyline(latlngs, {
-            color: '#8b5cf6',
-            weight: 4,
-            opacity: 0.85,
-          }).addTo(group);
+          L.polyline(latlngs, { color: '#8b5cf6', weight: 4, opacity: 0.85 }).addTo(group);
         }
         if (el.type === 'node' && (el.tags?.railway === 'station' || el.tags?.railway === 'subway_entrance')) {
           const name = el.tags?.name || el.tags?.['name:en'] || 'Metro Station';
+          state.metroStations.push({ name, lat: el.lat, lng: el.lon, phase: 1 });
           L.circleMarker([el.lat, el.lon], {
-            radius: 6,
-            color: '#fff',
-            fillColor: '#8b5cf6',
-            fillOpacity: 1,
-            weight: 2,
+            radius: 6, color: '#fff', fillColor: '#8b5cf6', fillOpacity: 1, weight: 2,
           })
-            .bindTooltip(`<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name}</div></div>`, {
-              direction: 'top', className: 'zone-tooltip-wrap',
-            })
-            .addTo(group);
+          .bindTooltip(`<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name}</div></div>`, {
+            direction: 'top', className: 'zone-tooltip-wrap',
+          })
+          .addTo(group);
         }
       });
 
-      state.metroLayer = group;
-
-      // Auto-add if toggle is checked
-      if (document.getElementById('toggle-metro')?.checked) {
-        group.addTo(state.map);
-      }
-
-      const count = json.elements.filter(e => e.type === 'node').length;
+      const ph1Count = json.elements.filter(e => e.type === 'node').length;
+      const ph2Count = state.metroStations.filter(s => s.phase === 2).length;
       const subEl = document.getElementById('metro-sub');
-      if (subEl) subEl.textContent = `${count} stations · Chennai Metro Rail`;
+      if (subEl) subEl.textContent = `Ph.1: ${ph1Count} stations · Ph.2: ${ph2Count} stops`;
     } catch (_) {
-      // Non-critical
+      // Non-critical — Phase 2 already loaded
     }
   }
 

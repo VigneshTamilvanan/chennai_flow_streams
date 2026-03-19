@@ -149,51 +149,27 @@
       </button>
     </div>
     <label class="layer-item">
-      <input type="checkbox" id="toggle-streams" />
-      <span class="layer-dot" style="background:#001FE7"></span>
-      <span class="layer-item-text">
-        <span class="layer-item-name">Flood Streams</span>
-        <span class="layer-item-sub">Natural drainage lines (DEM)</span>
-      </span>
-    </label>
-    <label class="layer-item">
-      <input type="checkbox" id="toggle-substreams" />
-      <span class="layer-dot" style="background:#00BFFF;opacity:0.8"></span>
-      <span class="layer-item-text">
-        <span class="layer-item-name">Drainage Network</span>
-        <span class="layer-item-sub">Sub-stream coverage</span>
-      </span>
-    </label>
-    <label class="layer-item">
-      <input type="checkbox" id="toggle-dem" />
-      <span class="layer-dot" style="background:linear-gradient(135deg,#8B4513,#228B22)"></span>
-      <span class="layer-item-text">
-        <span class="layer-item-name">Elevation (DEM)</span>
-        <span class="layer-item-sub">ALOS PALSAR terrain data</span>
-      </span>
-    </label>
-    <label class="layer-item">
-      <input type="checkbox" id="toggle-zones" checked />
-      <span class="layer-dot" style="background:linear-gradient(135deg,#16a34a,#dc2626)"></span>
-      <span class="layer-item-text">
-        <span class="layer-item-name">Zone Markers</span>
-        <span class="layer-item-sub">Flood risk by area</span>
-      </span>
-    </label>
-    <label class="layer-item">
-      <input type="checkbox" id="toggle-localities" />
-      <span class="layer-dot" style="background:#9ca3af;border-radius:50%"></span>
-      <span class="layer-item-text">
-        <span class="layer-item-name">OSM Localities</span>
-        <span class="layer-item-sub" id="localities-sub">Loading from OpenStreetMap…</span>
-      </span>
-    </label>
-    <label class="layer-item">
       <input type="checkbox" id="toggle-metro" />
       <span class="layer-dot" style="background:#8b5cf6;border-radius:50%"></span>
       <span class="layer-item-text">
         <span class="layer-item-name">Metro Rail</span>
-        <span class="layer-item-sub" id="metro-sub">Loading Chennai Metro…</span>
+        <span class="layer-item-sub" id="metro-sub">Phase 1 &amp; 2 lines + stations</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-bus-terminus" />
+      <span class="layer-dot" style="background:#0d9488;border-radius:50%"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Bus Terminus</span>
+        <span class="layer-item-sub">Major MTC bus depots</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-suburban" />
+      <span class="layer-dot" style="background:#92400e"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Suburban Rail</span>
+        <span class="layer-item-sub">Corridors + stations</span>
       </span>
     </label>
     <label class="layer-item">
@@ -221,19 +197,44 @@
       </span>
     </label>
     <label class="layer-item">
-      <input type="checkbox" id="toggle-suburban" />
-      <span class="layer-dot" style="background:#92400e"></span>
+      <input type="checkbox" id="toggle-zones" checked />
+      <span class="layer-dot" style="background:linear-gradient(135deg,#16a34a,#dc2626)"></span>
       <span class="layer-item-text">
-        <span class="layer-item-name">Suburban Rail</span>
-        <span class="layer-item-sub">MRTS / suburban corridors</span>
+        <span class="layer-item-name">Zone Markers</span>
+        <span class="layer-item-sub">Property zones by area</span>
       </span>
     </label>
     <label class="layer-item">
-      <input type="checkbox" id="toggle-bus-terminus" />
-      <span class="layer-dot" style="background:#0d9488;border-radius:50%"></span>
+      <input type="checkbox" id="toggle-localities" />
+      <span class="layer-dot" style="background:#9ca3af;border-radius:50%"></span>
       <span class="layer-item-text">
-        <span class="layer-item-name">Bus Terminus</span>
-        <span class="layer-item-sub">Major MTC bus depots</span>
+        <span class="layer-item-name">OSM Localities</span>
+        <span class="layer-item-sub" id="localities-sub">Loading from OpenStreetMap…</span>
+      </span>
+    </label>
+    <div class="layer-section-divider">Flood &amp; Terrain</div>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-streams" />
+      <span class="layer-dot" style="background:#001FE7"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Flood Streams</span>
+        <span class="layer-item-sub">Natural drainage lines (DEM)</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-substreams" />
+      <span class="layer-dot" style="background:#00BFFF;opacity:0.8"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Drainage Network</span>
+        <span class="layer-item-sub">Sub-stream coverage</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-dem" />
+      <span class="layer-dot" style="background:linear-gradient(135deg,#8B4513,#228B22)"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Elevation (DEM)</span>
+        <span class="layer-item-sub">ALOS PALSAR terrain data</span>
       </span>
     </label>
   </div>
@@ -249,6 +250,17 @@
   <script src="data/road_nh.js"></script>
   <script src="data/road_suburban.js"></script>
   <script src="data/road_bus_terminus.js"></script>
+  <script src="data/suburban_stations.js"></script>
+  <script src="data/metro_ph2_madh_shol_line.js"></script>
+  <script src="data/metro_ph2_lh_poona_line.js"></script>
+  <script src="data/metro_ph2_madh_sipco_line.js"></script>
+  <script src="data/metro_ph2_air_wimco_line.js"></script>
+  <script src="data/metro_ph2_stm_central_line.js"></script>
+  <script src="data/metro_ph2_madh_shol_stn.js"></script>
+  <script src="data/metro_ph2_lh_poona_stn.js"></script>
+  <script src="data/metro_ph2_madh_sipco_stn.js"></script>
+  <script src="data/metro_ph2_air_wimco_stn.js"></script>
+  <script src="data/metro_ph2_stm_central_stn.js"></script>
   <script src="data/chennai-data.js"></script>
   <script src="js/flood-score.js"></script>
   <script src="js/app.js"></script>
