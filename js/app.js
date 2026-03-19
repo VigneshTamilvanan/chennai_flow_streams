@@ -2107,15 +2107,17 @@ const App = (() => {
 
   async function reverseGeocode(lat, lng) {
     try {
-      // Overpass API: query place nodes (neighbourhood/suburb/hamlet/village/quarter)
-      // within 600m for locality name, road names within 80m, and postcode nodes within 400m.
-      // This avoids Nominatim's polygon-containment issues that return "Chennai" or
-      // admin-division names (e.g. "CMWSSB Division 106") for inner-city areas.
+      // Overpass API: query place nodes within 1500m for locality name, road WAYS within
+      // 100m for road name, and postcode nodes within 400m.
+      // Key fixes vs Nominatim:
+      //  - Includes place=locality (most common type in Chennai/India, missing from OSM neighbourhood)
+      //  - Roads in OSM are way elements, not node elements — use way["highway"]["name"]
+      //  - Avoids Nominatim polygon-containment returning "Chennai" / "CMWSSB Division 106"
       const query = `[out:json][timeout:10];
 (
-  node["place"~"^(neighbourhood|suburb|quarter|hamlet|village)$"]["name"](around:600,${lat},${lng});
-  way["place"~"^(neighbourhood|suburb|quarter|hamlet|village)$"]["name"](around:600,${lat},${lng});
-  node["highway"]["name"](around:80,${lat},${lng});
+  node["place"~"^(neighbourhood|suburb|quarter|hamlet|village|locality)$"]["name"](around:1500,${lat},${lng});
+  way["place"~"^(neighbourhood|suburb|quarter|hamlet|village|locality)$"]["name"](around:1500,${lat},${lng});
+  way["highway"]["name"](around:100,${lat},${lng});
   node["addr:postcode"](around:400,${lat},${lng});
 );out tags center;`;
 
