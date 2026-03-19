@@ -633,13 +633,16 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 .map-fabs {
   position: fixed;
   right: 14px;
-  bottom: 24px;
+  bottom: 24px; /* default when no panel */
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   z-index: 600;
+  transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+/* Shift FABs up when reco panel is in peek or open state */
+#reco-panel.ready ~ .map-fabs { bottom: 80px; }
 
 /* "Layers" label under the layers FAB */
 .fab-layers-btn::after {
