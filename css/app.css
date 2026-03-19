@@ -1115,3 +1115,149 @@ body.pin-mode #map { cursor: crosshair !important; }
   color: var(--text-muted);
   margin-left: 2px;
 }
+
+/* ===== SORT BAR (Top Picks) ===== */
+.sort-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.sort-btn {
+  flex: 1;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  text-align: center;
+}
+.sort-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(26,86,219,0.05);
+}
+.sort-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+/* Commute badge in reco cards */
+.reco-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 2px;
+  flex-wrap: wrap;
+}
+.reco-commute {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 2px 7px;
+}
+
+/* ===== WORK LOCATION MARKER ===== */
+.work-pin {
+  background: #ea580c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 14px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  border: 2px solid #fff;
+  pointer-events: none;
+}
+
+/* ===== METRO MARKER ICON ===== */
+.metro-icon {
+  width: 22px;
+  height: 22px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.metro-icon-ph2 {
+  background: #a78bfa;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  border-width: 1.5px;
+}
+
+/* ===== MTC BUS TERMINUS ICON ===== */
+.mtc-icon {
+  background: #0d9488;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 5px;
+  border-radius: 5px;
+  border: 1.5px solid #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+  pointer-events: auto;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ===== TRANSIT SECTION LABEL ===== */
+.transit-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* ===== BASEMAP SWITCHER ===== */
+.basemap-switcher {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px 10px;
+}
+.bm-btn {
+  flex: 1;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.bm-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(26,86,219,0.05);
+}
+.bm-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}

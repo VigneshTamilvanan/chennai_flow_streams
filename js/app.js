@@ -39,6 +39,13 @@ const App = (() => {
     busTermini: [],       // [{name, lat, lng}]
     // Custom work location (from survey text input)
     customWorkLoc: null,  // { lat, lng, name }
+    // Work location map marker (shown after survey, removed on retake)
+    workMarker: null,
+    // Top Picks sort mode: 'score' | 'commute' | 'price'
+    recoSort: 'score',
+    // Basemap tile layers for switcher
+    baseLayers: {},
+    activeBasemap: 'hybrid',
   };
 
   // ── Haversine travel-time helper ───────────────────────────
@@ -83,6 +90,13 @@ const App = (() => {
     { name: 'Kilambakkam', lat: 12.8635, lng: 80.0698 },
   ];
 
+  // Major train terminals — always shown as reference distances
+  const MAJOR_TRAIN_TERMINALS = [
+    { name: 'Chennai Central', lat: 13.0827, lng: 80.2707 },
+    { name: 'Chennai Egmore',  lat: 13.0784, lng: 80.2621 },
+    { name: 'Tambaram',        lat: 12.9252, lng: 80.1273 },
+  ];
+
   // Find nearest transit stop of each type for a given lat/lng
   function findNearestTransit(lat, lng) {
     function nearestInList(list) {
@@ -97,11 +111,16 @@ const App = (() => {
       const km = haversineKm(lat, lng, h.lat, h.lng);
       return { ...h, km, minutes: transitMinutes(km) };
     });
+    const trainHubs = MAJOR_TRAIN_TERMINALS.map(t => {
+      const km = haversineKm(lat, lng, t.lat, t.lng);
+      return { ...t, km, minutes: transitMinutes(km) };
+    }).sort((a, b) => a.km - b.km);
     return {
       metro: nearestInList(state.metroStations),
       suburban: nearestInList(state.suburbStations),
       busNearest: nearestInList(state.busTermini),
       busHubs,
+      trainHubs,
     };
   }
 
@@ -323,6 +342,24 @@ const App = (() => {
   function finishOnboarding() {
     state.userPersona = { ...obAnswers };
     document.getElementById('onboarding').classList.add('hidden');
+
+    // Place / refresh work location marker on the map
+    if (state.workMarker) { state.workMarker.remove(); state.workMarker = null; }
+    if (state.userPersona.work === 'custom' && state.customWorkLoc) {
+      const workIcon = L.divIcon({
+        className: '',
+        html: `<div class="work-pin">💼 Work</div>`,
+        iconSize: [72, 28],
+        iconAnchor: [36, 28],
+      });
+      state.workMarker = L.marker(
+        [state.customWorkLoc.lat, state.customWorkLoc.lng],
+        { icon: workIcon, zIndexOffset: 900 }
+      )
+        .addTo(state.map)
+        .bindTooltip(state.customWorkLoc.name, { permanent: false, direction: 'top' });
+    }
+
     state.recommendations = computeRecommendations(state.userPersona);
     highlightRecommendations();
     showRecoPanel();
@@ -331,7 +368,38 @@ const App = (() => {
 
   // ── Recommendations Engine ─────────────────────────────────
   function computeRecommendations(persona) {
-    const scored = CHENNAI_ZONES.map(zone => {
+    // Commute tolerance ceiling (minutes)
+    const TOLERANCE_MAX = { 'under-20': 20, '20-40': 40, '40-60': 60, 'over-60': 999 };
+    const toleranceMax = TOLERANCE_MAX[persona.commute_tolerance] ?? 999;
+
+    // Budget ceiling per sqft
+    const BUDGET_CEIL = { 'under-4k': 4000, '4k-7k': 7000, '7k-12k': 12000, 'above-12k': Infinity };
+    const budgetCeil = BUDGET_CEIL[persona.budget] ?? Infinity;
+
+    // Work destination
+    const workKey = persona.work === 'wfh' || persona.work === 'other' ? null : persona.work;
+    const customLat = workKey === 'custom' ? state.customWorkLoc?.lat : null;
+    const customLng = workKey === 'custom' ? state.customWorkLoc?.lng : null;
+
+    // Pre-compute tWork for all zones (needed for pre-filter + sort)
+    const withCommute = CHENNAI_ZONES.map(zone => ({
+      ...zone,
+      tWork: workKey ? getCommute(zone, workKey, customLat, customLng) : null,
+    }));
+
+    // Pre-filter: exclude zones that far exceed commute tolerance
+    // Relax threshold if too few zones survive, then remove cap entirely
+    let filtered = withCommute;
+    if (workKey && toleranceMax < 999) {
+      const strict  = withCommute.filter(z => z.tWork == null || z.tWork <= toleranceMax * 1.5);
+      const relaxed = withCommute.filter(z => z.tWork == null || z.tWork <= toleranceMax * 2.0);
+      if      (strict.length  >= 3) filtered = strict;
+      else if (relaxed.length >= 3) filtered = relaxed;
+      // else filtered = withCommute (no filter, show all)
+    }
+
+    const scored = filtered.map(zone => {
+      const { tWork } = zone;
       let score = 0;
       const reasons = [];
 
@@ -341,18 +409,18 @@ const App = (() => {
       if (persona.budget === '4k-7k' && avgPrice <= 7500) { score += 25; reasons.push('Good value'); }
       if (persona.budget === '7k-12k' && avgPrice <= 12500) { score += 20; }
       if (persona.budget === 'above-12k') score += 15;
+      // Extra penalty for zones way over budget
+      if (budgetCeil < Infinity && avgPrice > budgetCeil * 1.4) score -= 20;
 
-      // Work proximity (haversine-computed)
-      const workKey = persona.work === 'wfh' || persona.work === 'other' ? null : persona.work;
-      const customLat = workKey === 'custom' ? state.customWorkLoc?.lat : null;
-      const customLng = workKey === 'custom' ? state.customWorkLoc?.lng : null;
-      const tWork = workKey ? getCommute(zone, workKey, customLat, customLng) : null;
+      // Work proximity — tiered scoring
       if (tWork !== null) {
-        if (tWork <= 15) { score += 30; reasons.push(`~${tWork} min to work`); }
-        else if (tWork <= 25) { score += 20; reasons.push(`~${tWork} min to work`); }
-        else if (tWork <= 35) score += 10;
+        if      (tWork <= 15) { score += 35; reasons.push(`~${tWork} min to work`); }
+        else if (tWork <= 25) { score += 25; reasons.push(`~${tWork} min to work`); }
+        else if (tWork <= 35) { score += 15; }
+        else if (tWork <= 50) { score += 5; }
+        // > 50 min → 0 pts
       } else if (!workKey) {
-        score += 15; // WFH doesn't penalize
+        score += 15; // WFH — no commute penalty
       }
 
       // Family
@@ -374,15 +442,22 @@ const App = (() => {
       if (persona.priority === 'schools' && zone.scores.schools >= 80) { score += 25; reasons.push('Top-rated schools'); }
       if (persona.priority === 'greenery' && zone.scores.greenery >= 70) { score += 25; reasons.push('Green & open'); }
 
-      // Commute tolerance
-      if (tWork !== null) {
-        if (persona.commute_tolerance === 'under-20' && tWork > 20) score -= 15;
-        if (persona.commute_tolerance === '20-40' && tWork > 40) score -= 10;
-        if (persona.commute_tolerance === 'under-20' && tWork <= 20) { score += 15; reasons.push(`Only ~${tWork} min commute`); }
-        if (persona.commute_tolerance === '20-40' && tWork <= 40) score += 8;
+      // Commute tolerance — progressive penalty (replaces flat -15)
+      if (tWork !== null && toleranceMax < 999) {
+        const overage = tWork - toleranceMax;
+        if (overage > 0) {
+          // -5 pts per 10 min over tolerance, max penalty -60
+          const penalty = Math.min(60, Math.floor(overage / 10) * 5 + 5);
+          score -= penalty;
+        } else {
+          // Bonus for fitting comfortably within tolerance
+          if (persona.commute_tolerance === 'under-20') { score += 15; reasons.push(`Only ~${tWork} min commute`); }
+          else if (persona.commute_tolerance === '20-40') score += 8;
+          else if (persona.commute_tolerance === '40-60') score += 5;
+        }
       }
 
-      return { ...zone, matchScore: score, reasons };
+      return { ...zone, tWork, matchScore: score, reasons };
     });
 
     return scored.sort((a, b) => b.matchScore - a.matchScore).slice(0, 6);
@@ -437,13 +512,56 @@ const App = (() => {
     list.innerHTML = '';
     panel.classList.add('ready'); // enables peek mode
 
-    state.recommendations.forEach((zone, i) => {
+    // Sort bar
+    const sortBar = document.createElement('div');
+    sortBar.className = 'sort-bar';
+    const sortBtns = [
+      { key: 'score',   label: '⭐ Score' },
+      { key: 'commute', label: '🕐 Commute' },
+      { key: 'price',   label: '💰 Price' },
+    ];
+    sortBtns.forEach(({ key, label }) => {
+      const btn = document.createElement('button');
+      btn.className = 'sort-btn' + (state.recoSort === key ? ' active' : '');
+      btn.dataset.sort = key;
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        state.recoSort = key;
+        showRecoPanel();
+      });
+      sortBar.appendChild(btn);
+    });
+    list.appendChild(sortBar);
+
+    // Apply sort
+    let sorted = [...state.recommendations];
+    if (state.recoSort === 'commute') {
+      sorted.sort((a, b) => {
+        if (a.tWork == null && b.tWork == null) return 0;
+        if (a.tWork == null) return 1;
+        if (b.tWork == null) return -1;
+        return a.tWork - b.tWork;
+      });
+    } else if (state.recoSort === 'price') {
+      sorted.sort((a, b) =>
+        ((a.priceMin + a.priceMax) / 2) - ((b.priceMin + b.priceMax) / 2)
+      );
+    }
+    // else 'score' — already sorted by score from computeRecommendations
+
+    sorted.forEach((zone, i) => {
       const card = document.createElement('div');
       card.className = 'reco-card' + (i === 0 ? ' top-pick' : '');
+      const commuteBadge = zone.tWork != null
+        ? `<span class="reco-commute">🕐 ~${zone.tWork} min</span>`
+        : '';
       card.innerHTML = `
         <div class="reco-rank">${i === 0 ? '⭐ Best Match' : `#${i + 1} Pick`}</div>
         <div class="reco-zone-name">${zone.name}</div>
-        <span class="reco-flood-badge risk-${zone.floodTier}">${floodTierLabel(zone.floodTier)}</span>
+        <div class="reco-badges">
+          <span class="reco-flood-badge risk-${zone.floodTier}">${floodTierLabel(zone.floodTier)}</span>
+          ${commuteBadge}
+        </div>
         <div class="reco-price">₹${zone.priceMin.toLocaleString('en-IN')} – ${zone.priceMax.toLocaleString('en-IN')}/sqft</div>
         <div class="reco-why">${zone.reasons.slice(0, 2).join(' · ')}</div>
       `;
@@ -459,6 +577,9 @@ const App = (() => {
   }
 
   function retakeQuiz() {
+    // Remove work location marker
+    if (state.workMarker) { state.workMarker.remove(); state.workMarker = null; }
+
     // Reset quiz state
     obStep = 0;
     // Save previous picks so skip can restore them
@@ -498,17 +619,52 @@ const App = (() => {
       '<a href="https://leafletjs.com">Leaflet</a>'
     );
 
-    // Base layer — OSM
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // ── Basemap tile layers ─────────────────────────────────
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 20,
       attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
-    }).addTo(state.map);
-
-    // Google hybrid on top
-    const googleHybrid = L.tileLayer(
+    });
+    const hybridLayer = L.tileLayer(
       'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
       { opacity: 0.65, maxNativeZoom: 20, maxZoom: 28, attribution: '© Google' }
-    ).addTo(state.map);
+    );
+    const normalLayer = L.tileLayer(
+      'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+      { maxNativeZoom: 20, maxZoom: 28, attribution: '© Google' }
+    );
+
+    // Default: OSM + Google Hybrid (same as before)
+    osmLayer.addTo(state.map);
+    hybridLayer.addTo(state.map);
+
+    // Store for basemap switcher
+    state.baseLayers = { osm: osmLayer, hybrid: hybridLayer, normal: normalLayer };
+    state.activeBasemap = 'hybrid';
+
+    // Basemap switcher button handlers
+    document.querySelectorAll('.bm-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const bm = btn.dataset.bm;
+        if (bm === state.activeBasemap) return;
+        // Remove all base layers
+        [osmLayer, hybridLayer, normalLayer].forEach(l => {
+          if (state.map.hasLayer(l)) state.map.removeLayer(l);
+        });
+        // Apply selected basemap
+        if (bm === 'hybrid') {
+          osmLayer.addTo(state.map);
+          hybridLayer.addTo(state.map);
+        } else if (bm === 'normal') {
+          normalLayer.addTo(state.map);
+        } else {
+          osmLayer.addTo(state.map);
+        }
+        state.activeBasemap = bm;
+        document.querySelectorAll('.bm-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.bm === bm)
+        );
+      });
+    });
 
     // DEM overlay — off by default, user enables via layer panel
     const demBounds = [[12.469166667, 79.55], [13.5625, 80.348333333]];
@@ -568,22 +724,20 @@ const App = (() => {
             fillOpacity: 0.9,
             weight: 1.5,
           })
-          .bindTooltip(
-            `<div class="zone-tooltip"><div class="zone-tooltip-name">🚉 ${name}</div></div>`,
-            { direction: 'top', className: 'zone-tooltip-wrap' }
-          )
+          .bindTooltip(`🚉 ${name}`, { direction: 'top' })
           .addTo(state.suburbanLayer);
         });
       }
     }
     if (typeof json_MajorBusTerminus_1 !== 'undefined') {
       state.busTerminusLayer = L.geoJson(json_MajorBusTerminus_1, {
-        pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
-          radius: 7,
-          color: '#fff',
-          fillColor: '#0d9488',
-          fillOpacity: 0.9,
-          weight: 2,
+        pointToLayer: (feature, latlng) => L.marker(latlng, {
+          icon: L.divIcon({
+            className: '',
+            html: '<div class="mtc-icon">MTC</div>',
+            iconSize: [34, 20],
+            iconAnchor: [17, 20],
+          }),
         }),
         onEachFeature: (feature, layer) => {
           const name = (feature.properties?.['Name of th'] || feature.properties?.Name || 'Bus Terminus').trim();
@@ -592,10 +746,7 @@ const App = (() => {
             const [lng2, lat2] = feature.geometry.coordinates;
             state.busTermini.push({ name, lat: lat2, lng: lng2 });
           }
-          layer.bindTooltip(
-            `<div class="zone-tooltip"><div class="zone-tooltip-name">🚌 ${name}</div></div>`,
-            { direction: 'top', className: 'zone-tooltip-wrap', permanent: false }
-          );
+          layer.bindTooltip(name, { direction: 'top', permanent: false });
         },
       });
     }
@@ -908,6 +1059,14 @@ const App = (() => {
       rows.push(mkRow('🏢', h.name, h.km, h.minutes));
     });
 
+    // Major train terminals (always shown, sorted by distance)
+    if (nearby.trainHubs?.length) {
+      rows.push(`<div class="transit-section-label">🚆 Train Terminals</div>`);
+      nearby.trainHubs.forEach(t => {
+        rows.push(mkRow('🚆', t.name, t.km, t.minutes));
+      });
+    }
+
     return rows.length
       ? rows.join('')
       : `<div style="color:#9ca3af;font-size:12px">Enable transit layers to see nearest stops</div>`;
@@ -1198,17 +1357,15 @@ const App = (() => {
         const [lng2, lat2] = f.geometry.coordinates;
         const name = (f.properties?.Name || 'Metro Stop').trim();
         state.metroStations.push({ name, lat: lat2, lng: lng2, phase: 2 });
-        L.circleMarker([lat2, lng2], {
-          radius: 4,
-          color: '#fff',
-          fillColor: '#a78bfa',
-          fillOpacity: 0.9,
-          weight: 1.5,
+        L.marker([lat2, lng2], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div class="metro-icon metro-icon-ph2">Ⓜ</div>',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+          }),
         })
-        .bindTooltip(
-          `<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name} <span style="opacity:0.6;font-size:10px">(Ph.2)</span></div></div>`,
-          { direction: 'top', className: 'zone-tooltip-wrap' }
-        )
+        .bindTooltip(`${name} (Ph.2)`, { direction: 'top' })
         .addTo(group);
       });
     });
@@ -1244,12 +1401,15 @@ const App = (() => {
           if (rawName.length < 3) return;
           const name = rawName;
           state.metroStations.push({ name, lat: el.lat, lng: el.lon, phase: 1 });
-          L.circleMarker([el.lat, el.lon], {
-            radius: 6, color: '#fff', fillColor: '#8b5cf6', fillOpacity: 1, weight: 2,
+          L.marker([el.lat, el.lon], {
+            icon: L.divIcon({
+              className: '',
+              html: '<div class="metro-icon">Ⓜ</div>',
+              iconSize: [22, 22],
+              iconAnchor: [11, 11],
+            }),
           })
-          .bindTooltip(`<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name}</div></div>`, {
-            direction: 'top', className: 'zone-tooltip-wrap',
-          })
+          .bindTooltip(name, { direction: 'top' })
           .addTo(group);
         }
       });
