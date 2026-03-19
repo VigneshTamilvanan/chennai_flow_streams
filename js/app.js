@@ -22,7 +22,8 @@ const App = (() => {
     pinMode: false,
     pinMarker: null,
     pinBuffer: null,
-    pinMask: null,     // spotlight mask — darkens everything outside the buffer
+    pinMask: null,        // unused (kept for safety)
+    _bufferClipUpdate: null, // fn ref for removing the clip listener
     _pinData: null,
     // OSM locality layer
     localityLayer: null,
@@ -895,11 +896,6 @@ const App = (() => {
       '<a href="https://leafletjs.com">Leaflet</a>'
     );
 
-    // Custom pane for the buffer spotlight mask — sits above all overlay layers
-    // (overlayPane z=400) but below markers (markerPane z=600)
-    const maskPane = state.map.createPane('bufferMaskPane');
-    maskPane.style.zIndex = 500;
-    maskPane.style.pointerEvents = 'none';
 
     // ── Basemap tile layers ─────────────────────────────────
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1996,48 +1992,66 @@ const App = (() => {
     }
   }
 
-  // Build a GeoJSON polygon that covers the whole world MINUS a circle hole at
-  // (lat, lng) with radiusM metres — creates a darkening "spotlight" effect.
-  function createBufferMask(lat, lng, radiusM) {
-    if (state.pinMask) { state.map.removeLayer(state.pinMask); state.pinMask = null; }
+  // Clip all SVG overlay layers (metro, streams, roads …) to a circle at
+  // (lat, lng) / radiusM metres. Clip is applied to each inner <g> element
+  // (not the <svg> itself) so it stays in sync with Leaflet's pan transforms.
+  function applyBufferClip(lat, lng, radiusM) {
+    removeBufferClip();
 
-    const pts = 72;
-    const holeCoords = [];
-    for (let i = 0; i <= pts; i++) {
-      const angle = (i / pts) * 2 * Math.PI;
-      const dLat = (radiusM / 111320) * Math.cos(angle);
-      const dLng = (radiusM / (111320 * Math.cos(lat * Math.PI / 180))) * Math.sin(angle);
-      holeCoords.push([lng + dLng, lat + dLat]);
+    const svg = state.map.getPanes().overlayPane.querySelector('svg');
+    if (!svg) return;
+
+    // Ensure <defs>
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svg.insertBefore(defs, svg.firstChild);
     }
 
-    state.pinMask = L.geoJSON({
-      type: 'Feature',
-      geometry: {
-        type: 'Polygon',
-        // Outer ring spans the world; inner ring is the circle (creates the hole)
-        coordinates: [
-          [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]],
-          holeCoords,
-        ],
-      },
-    }, {
-      pane: 'bufferMaskPane',
-      style: {
-        fillColor: '#0f172a',
-        fillOpacity: 0.55,
-        color: 'none',
-        weight: 0,
-        fillRule: 'evenodd',
-      },
-      interactive: false,
-    }).addTo(state.map);
+    const cp = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+    cp.id = 'bufferClip';
+    cp.setAttribute('clipPathUnits', 'userSpaceOnUse');
+    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circ.id = 'bufferClipCircle';
+    cp.appendChild(circ);
+    defs.appendChild(cp);
+
+    function update() {
+      // Update circle in Leaflet layer-point coords (same space as path d=)
+      const cPt = state.map.latLngToLayerPoint([lat, lng]);
+      const ePt = state.map.latLngToLayerPoint([lat + radiusM / 111320, lng]);
+      circ.setAttribute('cx', cPt.x);
+      circ.setAttribute('cy', cPt.y);
+      circ.setAttribute('r', Math.abs(cPt.y - ePt.y));
+      // Apply to every child <g> — handles layers toggled after pin was dropped
+      svg.querySelectorAll(':scope > g').forEach(g => {
+        g.setAttribute('clip-path', 'url(#bufferClip)');
+      });
+    }
+
+    update();
+    state.map.on('move zoom viewreset zoomend moveend', update);
+    state._bufferClipUpdate = update;
+  }
+
+  function removeBufferClip() {
+    if (state._bufferClipUpdate) {
+      state.map.off('move zoom viewreset zoomend moveend', state._bufferClipUpdate);
+      state._bufferClipUpdate = null;
+    }
+    const svg = state.map.getPanes().overlayPane?.querySelector('svg');
+    if (svg) {
+      svg.removeAttribute('clip-path');
+      svg.querySelectorAll(':scope > g').forEach(g => g.removeAttribute('clip-path'));
+      document.getElementById('bufferClip')?.remove();
+    }
   }
 
   function dropPin(lat, lng) {
-    // Remove previous pin + buffer + mask
+    // Remove previous pin + buffer + clip
     if (state.pinMarker) state.map.removeLayer(state.pinMarker);
     if (state.pinBuffer) state.map.removeLayer(state.pinBuffer);
-    if (state.pinMask)   { state.map.removeLayer(state.pinMask); state.pinMask = null; }
+    removeBufferClip();
 
     // Custom pin icon
     const pinIcon = L.divIcon({
@@ -2058,8 +2072,8 @@ const App = (() => {
       dashArray: '7 5',
     }).addTo(state.map);
 
-    // Spotlight mask — darkens everything outside the 2km buffer
-    createBufferMask(lat, lng, 2000);
+    // Clip all SVG overlay layers to the 2km buffer circle
+    applyBufferClip(lat, lng, 2000);
 
     // Zoom to fit buffer
     state.map.fitBounds(state.pinBuffer.getBounds(), { padding: [50, 50] });
@@ -2093,14 +2107,28 @@ const App = (() => {
 
   async function reverseGeocode(lat, lng) {
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en&addressdetails=1`;
+      // zoom=14 targets suburb/neighbourhood-level OSM features.
+      // data.name is the actual OSM place name at that point.
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en&addressdetails=1&zoom=14`;
       const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
       const data = await resp.json();
       const a = data.address || {};
-      // Prefer most-specific name first: neighbourhood > hamlet > suburb > …
-      const short = a.neighbourhood || a.hamlet || a.village || a.suburb
-                  || a.quarter || a.city_district || a.town
-                  || data.display_name.split(',')[0];
+
+      // Filter out utility/administrative tags (CMWSSB Division, Ward #, etc.)
+      const isAdminTag = v => v && /\b(division|ward|zone|block|sector|taluk)\b[\s\-]*\d/i.test(v);
+
+      // 1st choice: OSM feature name at zoom=14 (e.g. "Vyasarpadi")
+      // 2nd choice: address sub-fields, most-specific first
+      // 3rd choice: first part of display_name — only if not an admin tag
+      const addrFallback = [a.neighbourhood, a.hamlet, a.village, a.suburb,
+                            a.quarter, a.city_district, a.town]
+                           .find(v => v && !isAdminTag(v));
+      const displayFirst = data.display_name.split(',')[0];
+      const short = (!isAdminTag(data.name) && data.name)
+                  || addrFallback
+                  || (!isAdminTag(displayFirst) && displayFirst)
+                  || data.display_name.split(',').find(p => !isAdminTag(p.trim()))?.trim()
+                  || 'Custom Location';
       const district = a.city_district || a.county || a.state_district || '';
       const pincode = a.postcode || '';
       return { short, district, pincode };
@@ -2247,7 +2275,7 @@ const App = (() => {
   function clearPin() {
     if (state.pinMarker) { state.map.removeLayer(state.pinMarker); state.pinMarker = null; }
     if (state.pinBuffer) { state.map.removeLayer(state.pinBuffer); state.pinBuffer = null; }
-    if (state.pinMask)   { state.map.removeLayer(state.pinMask);   state.pinMask   = null; }
+    removeBufferClip();
     state._pinData = null;
     document.getElementById('sidebar').classList.remove('open');
   }
