@@ -1249,7 +1249,10 @@ const App = (() => {
           L.polyline(latlngs, { color: '#8b5cf6', weight: 4, opacity: 0.85 }).addTo(group);
         }
         if (el.type === 'node' && (el.tags?.railway === 'station' || el.tags?.railway === 'subway_entrance')) {
-          const name = el.tags?.name || el.tags?.['name:en'] || 'Metro Station';
+          const rawName = el.tags?.name || el.tags?.['name:en'] || '';
+          // Skip malformed/single-char OSM entries
+          if (rawName.length < 3) return;
+          const name = rawName;
           state.metroStations.push({ name, lat: el.lat, lng: el.lon, phase: 1 });
           L.circleMarker([el.lat, el.lon], {
             radius: 6, color: '#fff', fillColor: '#8b5cf6', fillOpacity: 1, weight: 2,
