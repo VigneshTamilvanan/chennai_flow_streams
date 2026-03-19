@@ -112,7 +112,12 @@
       <i class="fa fa-location-arrow"></i>
     </button>
     <button class="fab-btn" id="fab-layers" title="Map Layers">
-      <i class="fa fa-layer-group"></i>
+      <!-- Layers SVG icon -->
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+        <polyline points="2 17 12 22 22 17"/>
+        <polyline points="2 12 12 17 22 12"/>
+      </svg>
     </button>
   </div>
 
@@ -124,22 +129,34 @@
     <label class="layer-item">
       <input type="checkbox" id="toggle-streams" checked />
       <span class="layer-dot" style="background:#001FE7"></span>
-      Flood Streams
-    </label>
-    <label class="layer-item">
-      <input type="checkbox" id="toggle-dem" checked />
-      <span class="layer-dot" style="background:#8B4513"></span>
-      Elevation (DEM)
+      <span class="layer-item-text">
+        <span class="layer-item-name">Flood Streams</span>
+        <span class="layer-item-sub">Natural drainage lines (DEM)</span>
+      </span>
     </label>
     <label class="layer-item">
       <input type="checkbox" id="toggle-substreams" checked />
-      <span class="layer-dot" style="background:#00BFFF"></span>
-      Drainage Network
+      <span class="layer-dot" style="background:#00BFFF;opacity:0.8"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Drainage Network</span>
+        <span class="layer-item-sub">Sub-stream coverage</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-dem" checked />
+      <span class="layer-dot" style="background:linear-gradient(135deg,#8B4513,#228B22)"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Elevation (DEM)</span>
+        <span class="layer-item-sub">ALOS PALSAR terrain data</span>
+      </span>
     </label>
     <label class="layer-item">
       <input type="checkbox" id="toggle-zones" checked />
-      <span class="layer-dot" style="background:#16a34a"></span>
-      Zone Markers
+      <span class="layer-dot" style="background:linear-gradient(135deg,#16a34a,#dc2626)"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Zone Markers</span>
+        <span class="layer-item-sub">Flood risk by area</span>
+      </span>
     </label>
   </div>
 
