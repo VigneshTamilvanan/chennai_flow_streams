@@ -292,6 +292,7 @@ const App = (() => {
     // FABs
     document.getElementById('fab-locate').addEventListener('click', locateUser);
     document.getElementById('fab-layers').addEventListener('click', toggleLayerPanel);
+    document.getElementById('layer-panel-close').addEventListener('click', toggleLayerPanel);
 
     // My Picks button
     document.getElementById('my-picks-btn').addEventListener('click', () => {

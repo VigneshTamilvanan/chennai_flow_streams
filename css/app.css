@@ -628,9 +628,37 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
   bottom: 24px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
   z-index: 600;
 }
+
+/* "Layers" label under the layers FAB */
+.fab-layers-btn::after {
+  content: 'Layers';
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-transform: uppercase;
+  background: rgba(255,255,255,0.9);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.fab-layers-btn.active::after {
+  color: var(--primary);
+}
+
+/* Icon swap inside layers FAB */
+.fab-icon-close { display: none; }
+.fab-layers-btn.active .fab-icon-layers { display: none; }
+.fab-layers-btn.active .fab-icon-close { display: block; }
 .fab-btn {
   width: 46px; height: 46px;
   border-radius: 50%;
