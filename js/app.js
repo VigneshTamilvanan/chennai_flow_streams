@@ -55,6 +55,16 @@ const App = (() => {
       ]
     },
     {
+      q: "Max commute time you're comfortable with?",
+      key: "commute_tolerance",
+      options: [
+        { icon: "⚡", label: "Under 20 min", sub: "Live close to work", val: "under-20" },
+        { icon: "🚶", label: "20 – 40 min", sub: "Short commute", val: "20-40" },
+        { icon: "🚌", label: "40 – 60 min", sub: "Acceptable if area is good", val: "40-60" },
+        { icon: "🕐", label: "Over 60 min", sub: "Commute is not a priority", val: "over-60" },
+      ]
+    },
+    {
       q: "What's your top priority?",
       key: "priority",
       options: [
@@ -73,16 +83,6 @@ const App = (() => {
         { icon: "🟡", label: "₹4,000 – ₹7,000", sub: "Mid-range", val: "4k-7k" },
         { icon: "🟠", label: "₹7,000 – ₹12,000", sub: "Premium mid", val: "7k-12k" },
         { icon: "🔴", label: "Above ₹12,000", sub: "Premium", val: "above-12k" },
-      ]
-    },
-    {
-      q: "Max commute time you're comfortable with?",
-      key: "commute_tolerance",
-      options: [
-        { icon: "⚡", label: "Under 20 min", sub: "Live close to work", val: "under-20" },
-        { icon: "🚶", label: "20 – 40 min", sub: "Short commute", val: "20-40" },
-        { icon: "🚌", label: "40 – 60 min", sub: "Acceptable if area is good", val: "40-60" },
-        { icon: "🕐", label: "Over 60 min", sub: "Commute is not a priority", val: "over-60" },
       ]
     }
   ];
