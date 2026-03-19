@@ -625,15 +625,32 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .ob-pick-cancel:hover { background: rgba(0,0,0,0.05); }
 
-/* Minimised onboarding (map picking mode) */
-#onboarding.ob-minimised .ob-card {
-  transform: translateY(calc(100% - 80px));
-  transition: transform 0.3s ease;
-}
-#onboarding.ob-minimised {
+/* Pick-from-map mode: hide overlay completely, show floating hint bar */
+#onboarding.ob-picking {
+  background: transparent;
+  backdrop-filter: none;
   pointer-events: none;
+  align-items: flex-end;
+  padding-bottom: 24px;
 }
-#onboarding.ob-minimised .ob-pick-map-hint {
+#onboarding.ob-picking .ob-card {
+  display: none;
+}
+#onboarding.ob-picking .ob-pick-floating-hint {
+  display: flex !important;
+  pointer-events: auto;
+}
+.ob-pick-floating-hint {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  background: #1e3a5f;
+  color: #fff;
+  border-radius: 14px;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
   pointer-events: auto;
 }
 
@@ -754,8 +771,23 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
   z-index: 600;
   transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* Shift FABs up when reco panel is in peek or open state */
+/* Shift FABs up when reco panel is in peek state */
 #reco-panel.ready ~ .map-fabs { bottom: 80px; }
+
+/* Hide FABs + Leaflet controls when reco panel is fully open */
+#reco-panel.open ~ .map-fabs {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.map-fabs { transition: opacity 0.2s, bottom 0.3s cubic-bezier(0.4,0,0.2,1); }
+body.reco-open .leaflet-top,
+body.reco-open .leaflet-bottom {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.leaflet-top, .leaflet-bottom { transition: opacity 0.2s; }
 
 /* "Layers" label under the layers FAB */
 .fab-layers-btn::after {
@@ -1178,13 +1210,15 @@ body.pin-mode #map { cursor: crosshair !important; }
   margin-left: 2px;
 }
 
-/* ===== SORT BAR (Top Picks) ===== */
+/* ===== SORT BAR (Top Picks) — sits between header and card list ===== */
 .sort-bar {
   display: flex;
   gap: 3px;
-  padding: 5px 10px 4px;
+  padding: 4px 14px 5px;
   border-bottom: 1px solid var(--border);
+  background: var(--surface);
   align-items: center;
+  flex-shrink: 0;
 }
 .sort-bar-label {
   font-size: 10px;
@@ -1232,6 +1266,32 @@ body.pin-mode #map { cursor: crosshair !important; }
   padding: 2px 7px;
 }
 
+/* ===== WORK PICK PREVIEW MARKER (red, shown immediately on click) ===== */
+.work-pick-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.work-pick-dot {
+  width: 18px;
+  height: 18px;
+  background: #dc2626;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(220,38,38,0.5);
+}
+.work-pick-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fff;
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin-top: 3px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  white-space: nowrap;
+}
+
 /* ===== WORK LOCATION MARKER ===== */
 .work-pin {
   background: #ea580c;
@@ -1271,20 +1331,30 @@ body.pin-mode #map { cursor: crosshair !important; }
   border-width: 1.5px;
 }
 
-/* ===== MTC BUS TERMINUS ICON ===== */
-.mtc-icon {
+/* ===== TOOLTIP INLINE BADGES (metro Ⓜ and MTC label) ===== */
+.tt-metro-badge {
+  display: inline-block;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+.tt-mtc-badge {
+  display: inline-block;
   background: #0d9488;
   color: #fff;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 800;
-  padding: 3px 5px;
-  border-radius: 5px;
-  border: 1.5px solid #fff;
-  box-shadow: 0 1px 5px rgba(0,0,0,0.3);
-  pointer-events: auto;
-  cursor: pointer;
+  border-radius: 3px;
+  padding: 1px 3px;
+  vertical-align: middle;
   letter-spacing: 0.04em;
-  white-space: nowrap;
 }
 
 /* ===== TRANSIT SECTION LABEL ===== */

@@ -278,21 +278,17 @@ const App = (() => {
         searchTimer = setTimeout(() => obWorkNominatimSearch(q, input, dropEl), 400);
       });
 
-      // "Pick from map" — minimise the onboarding card and let user click map
+      // "Pick from map" — hide survey card, show full map, floating cancel bar
       pickBtn.addEventListener('click', () => {
         state._pickingWorkLoc = true;
-        pickBtn.classList.add('hidden');
-        pickHint.classList.remove('hidden');
-        // Shrink the onboarding overlay so the map is accessible
-        document.getElementById('onboarding').classList.add('ob-minimised');
+        document.getElementById('onboarding').classList.add('ob-picking');
       });
 
-      pickCancel.addEventListener('click', () => {
-        state._pickingWorkLoc = false;
-        pickHint.classList.add('hidden');
-        pickBtn.classList.remove('hidden');
-        document.getElementById('onboarding').classList.remove('ob-minimised');
-      });
+      pickCancel.addEventListener('click', cancelPickMode);
+
+      // Also wire the floating cancel button in the overlay
+      const floatingCancel = document.getElementById('ob-pick-floating-cancel');
+      if (floatingCancel) floatingCancel.addEventListener('click', cancelPickMode);
     }
 
     // Progress dots
@@ -307,6 +303,16 @@ const App = (() => {
     const nextBtn = document.getElementById('ob-next');
     nextBtn.disabled = !obAnswers[step.key];
     nextBtn.textContent = obStep === OB_STEPS.length - 1 ? 'Show My Matches →' : 'Next →';
+  }
+
+  function cancelPickMode() {
+    state._pickingWorkLoc = false;
+    document.getElementById('onboarding').classList.remove('ob-picking');
+    // Remove temporary pick marker if cancelled without confirming
+    if (state._pickPreviewMarker) {
+      state._pickPreviewMarker.remove();
+      state._pickPreviewMarker = null;
+    }
   }
 
   async function obWorkNominatimSearch(q, input, dropEl) {
@@ -371,6 +377,8 @@ const App = (() => {
     state.userPersona = { ...obAnswers };
     document.getElementById('onboarding').classList.add('hidden');
 
+    // Remove pick preview marker (replaced by permanent work marker below)
+    if (state._pickPreviewMarker) { state._pickPreviewMarker.remove(); state._pickPreviewMarker = null; }
     // Place / refresh work location marker on the map
     if (state.workMarker) { state.workMarker.remove(); state.workMarker = null; }
     if (state.userPersona.work === 'custom' && state.customWorkLoc) {
@@ -441,8 +449,10 @@ const App = (() => {
       if (budgetCeil < Infinity && avgPrice > budgetCeil * 1.4) score -= 20;
 
       // Work proximity — tiered scoring
+      // Zones at/near the work location get a strong priority boost
       if (tWork !== null) {
-        if      (tWork <= 15) { score += 35; reasons.push(`~${tWork} min to work`); }
+        if      (tWork <= 8)  { score += 60; reasons.push(`Live where you work (${tWork} min)`); }
+        else if (tWork <= 15) { score += 35; reasons.push(`~${tWork} min to work`); }
         else if (tWork <= 25) { score += 25; reasons.push(`~${tWork} min to work`); }
         else if (tWork <= 35) { score += 15; }
         else if (tWork <= 50) { score += 5; }
@@ -540,46 +550,67 @@ const App = (() => {
     list.innerHTML = '';
     panel.classList.add('ready'); // enables peek mode
 
-    // Sort bar
-    const sortBar = document.createElement('div');
-    sortBar.className = 'sort-bar';
-    const lbl = document.createElement('span');
-    lbl.className = 'sort-bar-label';
-    lbl.textContent = 'Sort:';
-    sortBar.appendChild(lbl);
-    const sortBtns = [
-      { key: 'score',   label: '⭐ Score' },
-      { key: 'commute', label: '🕐 Commute' },
-      { key: 'price',   label: '💰 Price' },
-    ];
-    sortBtns.forEach(({ key, label }) => {
-      const btn = document.createElement('button');
-      btn.className = 'sort-btn' + (state.recoSort === key ? ' active' : '');
-      btn.dataset.sort = key;
-      btn.textContent = label;
-      btn.addEventListener('click', () => {
-        state.recoSort = key;
-        showRecoPanel();
+    // Sort bar — placed in the header, not the scroll list
+    let sortBar = panel.querySelector('.sort-bar');
+    if (!sortBar) {
+      sortBar = document.createElement('div');
+      sortBar.className = 'sort-bar';
+      const lbl = document.createElement('span');
+      lbl.className = 'sort-bar-label';
+      lbl.textContent = 'Sort:';
+      sortBar.appendChild(lbl);
+      const sortBtns = [
+        { key: 'score',   label: '⭐ Score' },
+        { key: 'commute', label: '🕐 Commute' },
+        { key: 'price',   label: '💰 Price' },
+      ];
+      sortBtns.forEach(({ key, label }) => {
+        const btn = document.createElement('button');
+        btn.dataset.sort = key;
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+          state.recoSort = key;
+          // Update active state without full re-render
+          sortBar.querySelectorAll('.sort-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.sort === key)
+          );
+          _renderRecoCards(list, state.recoSort);
+        });
+        sortBar.appendChild(btn);
       });
-      sortBar.appendChild(btn);
-    });
-    list.appendChild(sortBar);
+      // Insert after the reco-header
+      const header = panel.querySelector('.reco-header');
+      header.insertAdjacentElement('afterend', sortBar);
+    }
+    // Sync active button
+    sortBar.querySelectorAll('button[data-sort]').forEach(b =>
+      b.classList.toggle('sort-btn', true) ||
+      b.classList.toggle('active', b.dataset.sort === state.recoSort)
+    );
 
-    // Apply sort
+    _renderRecoCards(list, state.recoSort);
+    panel.classList.add('open');
+    document.body.classList.add('reco-open');
+  }
+
+  function _renderRecoCards(list, sortKey) {
+    // Remove existing cards only (keep sort bar if it's in the list)
+    list.querySelectorAll('.reco-card').forEach(c => c.remove());
+
+    const panel = document.getElementById('reco-panel');
     let sorted = [...state.recommendations];
-    if (state.recoSort === 'commute') {
+    if (sortKey === 'commute') {
       sorted.sort((a, b) => {
         if (a.tWork == null && b.tWork == null) return 0;
         if (a.tWork == null) return 1;
         if (b.tWork == null) return -1;
         return a.tWork - b.tWork;
       });
-    } else if (state.recoSort === 'price') {
+    } else if (sortKey === 'price') {
       sorted.sort((a, b) =>
         ((a.priceMin + a.priceMax) / 2) - ((b.priceMin + b.priceMax) / 2)
       );
     }
-    // else 'score' — already sorted by score from computeRecommendations
 
     sorted.forEach((zone, i) => {
       const card = document.createElement('div');
@@ -601,16 +632,16 @@ const App = (() => {
         flyToZone(zone);
         openZoneProfile(zone);
         panel.classList.remove('open');
+        document.body.classList.remove('reco-open');
       });
       list.appendChild(card);
     });
-
-    panel.classList.add('open');
   }
 
   function retakeQuiz() {
-    // Remove work location marker
+    // Remove work location marker + pick preview
     if (state.workMarker) { state.workMarker.remove(); state.workMarker = null; }
+    if (state._pickPreviewMarker) { state._pickPreviewMarker.remove(); state._pickPreviewMarker = null; }
 
     // Reset quiz state
     obStep = 0;
@@ -763,13 +794,12 @@ const App = (() => {
     }
     if (typeof json_MajorBusTerminus_1 !== 'undefined') {
       state.busTerminusLayer = L.geoJson(json_MajorBusTerminus_1, {
-        pointToLayer: (feature, latlng) => L.marker(latlng, {
-          icon: L.divIcon({
-            className: '',
-            html: '<div class="mtc-icon">MTC</div>',
-            iconSize: [34, 20],
-            iconAnchor: [17, 20],
-          }),
+        pointToLayer: (feature, latlng) => L.circleMarker(latlng, {
+          radius: 7,
+          color: '#fff',
+          fillColor: '#0d9488',
+          fillOpacity: 0.9,
+          weight: 2,
         }),
         onEachFeature: (feature, layer) => {
           const name = (feature.properties?.['Name of th'] || feature.properties?.Name || 'Bus Terminus').trim();
@@ -778,7 +808,11 @@ const App = (() => {
             const [lng2, lat2] = feature.geometry.coordinates;
             state.busTermini.push({ name, lat: lat2, lng: lng2 });
           }
-          layer.bindTooltip(name, { direction: 'top', permanent: false });
+          // Tooltip shows MTC logo + name
+          layer.bindTooltip(
+            `<span class="tt-mtc-badge">MTC</span> ${name}`,
+            { direction: 'top', permanent: false }
+          );
         },
       });
     }
@@ -885,10 +919,26 @@ const App = (() => {
   async function onMapClick(e) {
     const { lat, lng } = e.latlng;
 
-    // Pick-from-map mode: set work location from click
+    // Pick-from-map mode: drop red marker, reverse-geocode, restore survey
     if (state._pickingWorkLoc) {
       state._pickingWorkLoc = false;
-      // Reverse-geocode the clicked point to get a readable name
+
+      // Remove any previous pick preview marker
+      if (state._pickPreviewMarker) { state._pickPreviewMarker.remove(); state._pickPreviewMarker = null; }
+
+      // Drop a red "Work" marker immediately so user sees the pick
+      const redIcon = L.divIcon({
+        className: '',
+        html: `<div class="work-pick-marker"><div class="work-pick-dot"></div><div class="work-pick-label">Work</div></div>`,
+        iconSize: [48, 48],
+        iconAnchor: [24, 44],
+      });
+      state._pickPreviewMarker = L.marker([lat, lng], { icon: redIcon, zIndexOffset: 1100 }).addTo(state.map);
+
+      // Restore survey overlay immediately
+      document.getElementById('onboarding').classList.remove('ob-picking');
+
+      // Reverse-geocode asynchronously
       let name = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
       try {
         const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
@@ -898,20 +948,16 @@ const App = (() => {
         name = a.amenity || a.building || a.road || a.suburb || a.neighbourhood
              || d.display_name.split(',')[0] || name;
       } catch (_) {}
+
       state.customWorkLoc = { lat, lng, name };
-      // Update survey input and mark as selected
+      // Update survey input
       const input = document.getElementById('ob-work-search');
       if (input) { input.value = name; input.classList.add('ob-location-selected'); }
       const key = OB_STEPS[obStep]?.key;
       if (key) obAnswers[key] = 'custom';
-      // Restore survey overlay
-      document.getElementById('onboarding').classList.remove('ob-minimised');
-      const pickHint = document.getElementById('ob-pick-map-hint');
-      const pickBtn  = document.getElementById('ob-pick-map-btn');
-      if (pickHint) pickHint.classList.add('hidden');
-      if (pickBtn)  pickBtn.classList.remove('hidden');
       document.getElementById('ob-next').disabled = false;
-      showToast(`Work location set: ${name}`);
+      // Update marker tooltip with resolved name
+      state._pickPreviewMarker.bindTooltip(name, { permanent: false, direction: 'top' });
       return;
     }
 
@@ -1419,15 +1465,17 @@ const App = (() => {
         const [lng2, lat2] = f.geometry.coordinates;
         const name = (f.properties?.Name || 'Metro Stop').trim();
         state.metroStations.push({ name, lat: lat2, lng: lng2, phase: 2 });
-        L.marker([lat2, lng2], {
-          icon: L.divIcon({
-            className: '',
-            html: '<div class="metro-icon metro-icon-ph2">Ⓜ</div>',
-            iconSize: [20, 20],
-            iconAnchor: [10, 10],
-          }),
+        L.circleMarker([lat2, lng2], {
+          radius: 4,
+          color: '#fff',
+          fillColor: '#a78bfa',
+          fillOpacity: 0.9,
+          weight: 1.5,
         })
-        .bindTooltip(`${name} (Ph.2)`, { direction: 'top' })
+        .bindTooltip(
+          `<span class="tt-metro-badge">Ⓜ</span> ${name} <span style="opacity:0.65;font-size:10px">(Ph.2)</span>`,
+          { direction: 'top' }
+        )
         .addTo(group);
       });
     });
@@ -1463,15 +1511,17 @@ const App = (() => {
           if (rawName.length < 3) return;
           const name = rawName;
           state.metroStations.push({ name, lat: el.lat, lng: el.lon, phase: 1 });
-          L.marker([el.lat, el.lon], {
-            icon: L.divIcon({
-              className: '',
-              html: '<div class="metro-icon">Ⓜ</div>',
-              iconSize: [22, 22],
-              iconAnchor: [11, 11],
-            }),
+          L.circleMarker([el.lat, el.lon], {
+            radius: 6,
+            color: '#fff',
+            fillColor: '#8b5cf6',
+            fillOpacity: 1,
+            weight: 2,
           })
-          .bindTooltip(name, { direction: 'top' })
+          .bindTooltip(
+            `<span class="tt-metro-badge">Ⓜ</span> ${name}`,
+            { direction: 'top' }
+          )
           .addTo(group);
         }
       });
@@ -1890,17 +1940,21 @@ const App = (() => {
         document.getElementById('sidebar').classList.remove('open');
       });
 
-      // Reco panel — close collapses to peek
+      // Reco panel — close collapses to peek; restore map controls
       document.getElementById('reco-close').addEventListener('click', e => {
         e.stopPropagation();
         document.getElementById('reco-panel').classList.remove('open');
+        document.body.classList.remove('reco-open');
       });
       // Handle + header (but not close/retake buttons) expand when peeking
       ['.reco-handle', '.reco-header'].forEach(sel => {
         document.querySelector(sel)?.addEventListener('click', e => {
           if (e.target.closest('#reco-close') || e.target.closest('#retake-quiz-btn')) return;
           const panel = document.getElementById('reco-panel');
-          if (!panel.classList.contains('open')) panel.classList.add('open');
+          if (!panel.classList.contains('open')) {
+            panel.classList.add('open');
+            document.body.classList.add('reco-open');
+          }
         });
       });
       document.getElementById('retake-quiz-btn')?.addEventListener('click', e => {
