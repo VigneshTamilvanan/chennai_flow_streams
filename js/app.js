@@ -22,11 +22,15 @@ const App = (() => {
     pinMode: false,
     pinMarker: null,
     pinBuffer: null,
+    pinMask: null,        // unused (kept for safety)
+    _bufferClipUpdate: null, // fn ref for removing the clip listener
     _pinData: null,
     // OSM locality layer
     localityLayer: null,
-    // Metro layer
-    metroLayer: null,
+    // Metro layer (split by line)
+    metroLayers: {},  // id → L.layerGroup per line
+    // Employment hotspot layer
+    employmentLayer: null,
     // Road layers
     orrLayer: null,
     irrLayer: null,
@@ -96,6 +100,56 @@ const App = (() => {
     { name: 'Chennai Egmore',  lat: 13.0784, lng: 80.2621 },
     { name: 'Tambaram',        lat: 12.9252, lng: 80.1273 },
   ];
+
+  // Employment hotspot clusters (IT, Manufacturing, Govt)
+  const EMPLOYMENT_HOTSPOTS = [
+    // IT Clusters
+    { id: 'omr-it',           name: 'OMR IT Corridor',            type: 'IT',            lat: 12.9200, lng: 80.2280, desc: 'DLF, Olympia, Ascendas — 200k+ IT jobs' },
+    { id: 'tidel-park',       name: 'Tidel Park',                  type: 'IT',            lat: 12.9912, lng: 80.2489, desc: 'STPI IT Park, 15,000+ employees' },
+    { id: 'perungudi-it',     name: 'Perungudi IT Zone',           type: 'IT',            lat: 12.9620, lng: 80.2460, desc: 'Infosys, HCL, Cognizant campuses' },
+    { id: 'sholinganallur-it',name: 'Sholinganallur IT Hub',       type: 'IT',            lat: 12.9008, lng: 80.2278, desc: 'Amazon, Google, TCS campuses' },
+    { id: 'ambattur-it',      name: 'Ambattur IT Park (ELNET)',    type: 'IT',            lat: 13.1100, lng: 80.1640, desc: 'ELNET Software City, Wipro campus' },
+    { id: 'sriperumbudur-tech',name: 'Sriperumbudur Tech Corridor',type: 'IT',            lat: 12.9674, lng: 79.9460, desc: 'Nokia, Foxconn tech manufacturing' },
+    // Manufacturing
+    { id: 'ambattur-sidco',   name: 'Ambattur SIDCO Estate',       type: 'Manufacturing', lat: 13.1143, lng: 80.1548, desc: 'Largest industrial estate in TN, 1000+ units' },
+    { id: 'guindy-industrial', name: 'Guindy Industrial Estate',   type: 'Manufacturing', lat: 13.0050, lng: 80.2080, desc: 'SIPCOT auto-parts & light engineering' },
+    { id: 'manali-petrochem', name: 'Manali Petrochem Zone',       type: 'Manufacturing', lat: 13.1700, lng: 80.2580, desc: 'SPIC, HPCL, Chennai Petroleum refinery' },
+    { id: 'mepz-tambaram',    name: 'MEPZ (Tambaram)',             type: 'Manufacturing', lat: 12.9700, lng: 80.1480, desc: 'Multi-product export processing zone' },
+    { id: 'sriperumbudur-sez', name: 'Sriperumbudur SEZ',          type: 'Manufacturing', lat: 12.9800, lng: 79.9300, desc: 'Hyundai, BMW, Royal Enfield plants' },
+    { id: 'redhills-industrial',name: 'Red Hills Industrial Area', type: 'Manufacturing', lat: 13.1900, lng: 80.1800, desc: 'Chemicals, textiles, SME manufacturing units' },
+    // Government / Services
+    { id: 'secretariat',      name: 'Secretariat (Fort St George)', type: 'Govt',         lat: 13.0808, lng: 80.2836, desc: 'Tamil Nadu State Secretariat, High Court' },
+    { id: 'dms-campus',       name: 'Govt Hospital / DMS Area',    type: 'Govt',          lat: 13.0688, lng: 80.2583, desc: 'Directorate of Medical Services, Stanley Hospital' },
+    { id: 'anna-salai-offices',name: 'Anna Salai Offices',         type: 'Govt',          lat: 13.0500, lng: 80.2450, desc: 'LIC, nationalised banks, insurance HQs' },
+    { id: 'rajaji-bhavan',    name: 'Rajaji Bhavan (Besant Nagar)', type: 'Govt',         lat: 12.9980, lng: 80.2590, desc: 'Central Govt complex — Income Tax, DOPT' },
+    { id: 'cmda-offices',     name: 'CMDA / Planning Zone',        type: 'Govt',          lat: 13.0680, lng: 80.2760, desc: 'CMDA, CMWSSB, government authorities cluster' },
+  ];
+
+  const EMPLOYMENT_STYLE = {
+    IT:            { color: '#2563eb', fillColor: '#3b82f6', label: '💻', title: 'IT / Tech' },
+    Manufacturing: { color: '#c2410c', fillColor: '#f97316', label: '🏭', title: 'Manufacturing' },
+    Govt:          { color: '#15803d', fillColor: '#22c55e', label: '🏛️', title: 'Govt / Service' },
+  };
+
+  function loadEmploymentLayer() {
+    const group = L.layerGroup();
+    EMPLOYMENT_HOTSPOTS.forEach(spot => {
+      const style = EMPLOYMENT_STYLE[spot.type] || EMPLOYMENT_STYLE.IT;
+      const marker = L.circleMarker([spot.lat, spot.lng], {
+        radius: 9,
+        color: style.color,
+        fillColor: style.fillColor,
+        fillOpacity: 0.88,
+        weight: 2,
+      });
+      marker.bindTooltip(
+        `<span style="font-size:13px">${style.label}</span> <strong>${spot.name}</strong><br><span style="font-size:11px;color:#6b7280">${spot.desc}</span>`,
+        { direction: 'top', maxWidth: 220 }
+      );
+      marker.addTo(group);
+    });
+    state.employmentLayer = group;
+  }
 
   // Find nearest transit stop of each type for a given lat/lng
   function findNearestTransit(lat, lng) {
@@ -307,8 +361,8 @@ const App = (() => {
 
   function cancelPickMode() {
     state._pickingWorkLoc = false;
-    document.getElementById('onboarding').classList.remove('ob-picking');
-    // Remove temporary pick marker if cancelled without confirming
+    document.getElementById('pick-work-hint')?.classList.add('hidden');
+    document.getElementById('filter-bar')?.classList.add('open');
     if (state._pickPreviewMarker) {
       state._pickPreviewMarker.remove();
       state._pickPreviewMarker = null;
@@ -359,7 +413,7 @@ const App = (() => {
   }
 
   function skipOnboarding() {
-    document.getElementById('onboarding').classList.add('hidden');
+    document.getElementById('filter-bar')?.classList.remove('open');
     // If user skipped a retake, restore previous picks
     if (state._prevRecommendations?.length) {
       state.recommendations = state._prevRecommendations;
@@ -375,7 +429,7 @@ const App = (() => {
 
   function finishOnboarding() {
     state.userPersona = { ...obAnswers };
-    document.getElementById('onboarding').classList.add('hidden');
+    document.getElementById('filter-bar')?.classList.remove('open');
 
     // Remove pick preview marker (replaced by permanent work marker below)
     if (state._pickPreviewMarker) { state._pickPreviewMarker.remove(); state._pickPreviewMarker = null; }
@@ -661,9 +715,169 @@ const App = (() => {
     panel.classList.remove('open');
     panel.classList.remove('ready');
 
-    // Re-show onboarding
-    document.getElementById('onboarding').classList.remove('hidden');
-    renderObStep();
+    // Open filter bar so user can update preferences
+    const bar = document.getElementById('filter-bar');
+    if (bar) {
+      bar.classList.add('open');
+      syncFilterChips();
+      updateFilterPills();
+    }
+    const workInp = document.getElementById('fb-work-input');
+    if (workInp) workInp.value = '';
+  }
+
+  // ── Filter Bar (replaces onboarding modal) ─────────────────
+  function initFilterBar() {
+    const groupsEl = document.getElementById('fb-groups');
+    if (!groupsEl) return;
+
+    // Build one group per OB_STEPS entry
+    OB_STEPS.forEach(step => {
+      const grp = document.createElement('div');
+      grp.className = 'fb-group';
+      const titleEl = document.createElement('div');
+      titleEl.className = 'fb-group-title';
+      titleEl.textContent = step.q;
+      const optsEl = document.createElement('div');
+      optsEl.className = 'fb-opts';
+      optsEl.dataset.key = step.key;
+
+      step.options.forEach(opt => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'fb-chip';
+        chip.dataset.val = opt.val;
+        chip.dataset.key = step.key;
+        chip.textContent = `${opt.icon} ${opt.label}`;
+        if (obAnswers[step.key] === opt.val) chip.classList.add('selected');
+        chip.addEventListener('click', () => {
+          obAnswers[step.key] = opt.val;
+          // Clear custom work loc when a preset is chosen
+          if (step.hasLocationSearch && opt.val !== 'custom') {
+            state.customWorkLoc = null;
+            const inp = document.getElementById('fb-work-input');
+            if (inp) { inp.value = ''; inp.classList.remove('fb-work-selected'); }
+          }
+          optsEl.querySelectorAll('.fb-chip').forEach(c =>
+            c.classList.toggle('selected', c.dataset.val === opt.val)
+          );
+          updateFilterPills();
+        });
+        optsEl.appendChild(chip);
+      });
+
+      grp.appendChild(titleEl);
+      grp.appendChild(optsEl);
+      groupsEl.appendChild(grp);
+    });
+
+    // Work location Nominatim search in filter bar
+    const workInput  = document.getElementById('fb-work-input');
+    const workDrop   = document.getElementById('fb-work-dropdown');
+    const pickBtn    = document.getElementById('fb-pick-map-btn');
+    let workTimer    = null;
+
+    if (workInput) {
+      workInput.addEventListener('input', () => {
+        const q = workInput.value.trim();
+        workInput.classList.remove('fb-work-selected');
+        clearTimeout(workTimer);
+        workDrop.innerHTML = '';
+        if (q.length < 2) return;
+        workTimer = setTimeout(() => fbWorkNominatimSearch(q, workInput, workDrop), 400);
+      });
+    }
+
+    if (pickBtn) {
+      pickBtn.addEventListener('click', () => {
+        state._pickingWorkLoc = true;
+        document.getElementById('filter-bar')?.classList.remove('open');
+        document.getElementById('pick-work-hint')?.classList.remove('hidden');
+        showToast('Click anywhere on the map to set your work location');
+      });
+    }
+
+    const pickCancel = document.getElementById('pick-work-cancel');
+    if (pickCancel) pickCancel.addEventListener('click', cancelPickMode);
+
+    // Tab toggle
+    document.getElementById('fb-tab')?.addEventListener('click', () => {
+      document.getElementById('filter-bar')?.classList.toggle('open');
+    });
+
+    // Apply button
+    document.getElementById('fb-apply-btn')?.addEventListener('click', () => {
+      const filled = OB_STEPS.filter(s => obAnswers[s.key]).length;
+      if (filled === 0) {
+        showToast('Select at least one preference to find your best zones');
+        return;
+      }
+      finishOnboarding();
+    });
+
+    // Reset button
+    document.getElementById('fb-reset-btn')?.addEventListener('click', () => {
+      Object.keys(obAnswers).forEach(k => delete obAnswers[k]);
+      state.customWorkLoc = null;
+      document.querySelectorAll('.fb-chip').forEach(c => c.classList.remove('selected'));
+      if (workInput) { workInput.value = ''; workInput.classList.remove('fb-work-selected'); }
+      if (workDrop) workDrop.innerHTML = '';
+      updateFilterPills();
+    });
+
+    updateFilterPills();
+  }
+
+  function syncFilterChips() {
+    document.querySelectorAll('.fb-chip').forEach(chip => {
+      chip.classList.toggle('selected',
+        obAnswers[chip.dataset.key] === chip.dataset.val
+      );
+    });
+  }
+
+  function updateFilterPills() {
+    const pillsEl = document.getElementById('fb-pills-row');
+    if (!pillsEl) return;
+    const pills = [];
+    OB_STEPS.forEach(step => {
+      const val = obAnswers[step.key];
+      if (!val) return;
+      if (val === 'custom' && state.customWorkLoc) {
+        pills.push(`<span class="fb-pill">📍 ${state.customWorkLoc.name.slice(0, 14)}</span>`);
+      } else {
+        const opt = step.options.find(o => o.val === val);
+        if (opt) pills.push(`<span class="fb-pill">${opt.icon} ${opt.label}</span>`);
+      }
+    });
+    pillsEl.innerHTML = pills.join('');
+  }
+
+  async function fbWorkNominatimSearch(q, input, dropEl) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', Chennai, India')}&format=json&limit=4&accept-language=en`;
+      const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      const results = await resp.json();
+      dropEl.innerHTML = '';
+      results.slice(0, 4).forEach(r => {
+        const item = document.createElement('div');
+        item.className = 'fb-work-result';
+        const name = r.display_name.split(',')[0];
+        const sub  = r.display_name.split(',').slice(1, 3).join(',').trim();
+        item.innerHTML = `<span class="fb-work-result-name">${name}</span><span class="fb-work-result-sub">${sub}</span>`;
+        item.addEventListener('click', () => {
+          state.customWorkLoc = { lat: parseFloat(r.lat), lng: parseFloat(r.lon), name };
+          obAnswers['work'] = 'custom';
+          input.value = name;
+          input.classList.add('fb-work-selected');
+          dropEl.innerHTML = '';
+          document.querySelectorAll('.fb-opts[data-key="work"] .fb-chip')
+            .forEach(c => c.classList.remove('selected'));
+          updateFilterPills();
+        });
+        dropEl.appendChild(item);
+      });
+    } catch (_) {}
   }
 
   // ── Map Setup ──────────────────────────────────────────────
@@ -681,6 +895,7 @@ const App = (() => {
     state.map.attributionControl.setPrefix(
       '<a href="https://leafletjs.com">Leaflet</a>'
     );
+
 
     // ── Basemap tile layers ─────────────────────────────────
     const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -826,6 +1041,9 @@ const App = (() => {
     // Chennai Metro layer (async, non-blocking)
     loadMetroLayer();
 
+    // Employment hotspot layer (built immediately)
+    loadEmploymentLayer();
+
     // Click on map → reverse geocode and show nearest zone
     state.map.on('click', onMapClick);
 
@@ -848,9 +1066,19 @@ const App = (() => {
       if (!state.localityLayer) return;
       e.target.checked ? state.localityLayer.addTo(state.map) : state.map.removeLayer(state.localityLayer);
     });
-    document.getElementById('toggle-metro').addEventListener('change', e => {
-      if (!state.metroLayer) return;
-      e.target.checked ? state.metroLayer.addTo(state.map) : state.map.removeLayer(state.metroLayer);
+    document.getElementById('toggle-employment').addEventListener('change', e => {
+      if (!state.employmentLayer) return;
+      e.target.checked ? state.employmentLayer.addTo(state.map) : state.map.removeLayer(state.employmentLayer);
+    });
+    // Metro per-line toggles (ids match state.metroLayers keys)
+    ['line6', 'line7', 'line3', 'line4', 'line5'].forEach(lid => {
+      const el = document.getElementById(`toggle-metro-${lid}`);
+      if (!el) return;
+      el.addEventListener('change', ev => {
+        const layer = state.metroLayers[lid];
+        if (!layer) return;
+        ev.target.checked ? layer.addTo(state.map) : state.map.removeLayer(layer);
+      });
     });
     document.getElementById('toggle-orr').addEventListener('change', e => {
       if (!state.orrLayer) return;
@@ -879,10 +1107,24 @@ const App = (() => {
     document.getElementById('fab-layers').addEventListener('click', toggleLayerPanel);
     document.getElementById('layer-panel-close').addEventListener('click', toggleLayerPanel);
 
+    // Info panel
+    document.getElementById('info-btn').addEventListener('click', () => {
+      document.getElementById('info-panel').classList.remove('hidden');
+    });
+    document.getElementById('info-panel-close').addEventListener('click', () => {
+      document.getElementById('info-panel').classList.add('hidden');
+    });
+    document.getElementById('info-panel').addEventListener('click', e => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+    });
+
     // My Picks button
     document.getElementById('my-picks-btn').addEventListener('click', () => {
       if (state.recommendations.length > 0) showRecoPanel();
-      else showToast('Complete the quiz to see your picks');
+      else {
+        document.getElementById('filter-bar')?.classList.add('open');
+        showToast('Set your preferences to find your best zones');
+      }
     });
   }
 
@@ -891,11 +1133,14 @@ const App = (() => {
       const icon = createZoneIcon(zone);
       const marker = L.marker([zone.lat, zone.lng], { icon, zIndexOffset: 100 });
 
+      const composite = getCompositeScore(zone);
+      const compTier = getCompositeTier(composite);
+      const compLabel = composite >= 72 ? 'Excellent' : composite >= 55 ? 'Good' : composite >= 38 ? 'Average' : 'Below Avg';
       const tooltip = `
         <div class="zone-tooltip">
           <div class="zone-tooltip-name">${zone.name}</div>
           <div class="zone-tooltip-price">₹${zone.priceMin.toLocaleString('en-IN')} – ${zone.priceMax.toLocaleString('en-IN')}/sqft</div>
-          <div class="zone-tooltip-risk risk-${zone.floodTier}">${floodTierLabel(zone.floodTier)}</div>
+          <div class="zone-tooltip-score risk-${compTier}">⭐ Overall ${composite}/100 · ${compLabel}</div>
         </div>
       `;
       marker.bindTooltip(tooltip, { direction: 'top', offset: [0, -20], className: 'zone-tooltip-wrap', permanent: false });
@@ -906,12 +1151,27 @@ const App = (() => {
     });
   }
 
+  function getCompositeScore(zone) {
+    const s = zone.scores;
+    if (!s) return 50;
+    return Math.round((s.connectivity + s.amenities + s.schools + s.greenery + s.safety + s.value) / 6);
+  }
+
+  function getCompositeTier(score) {
+    if (score >= 72) return 'low';       // green  — great overall
+    if (score >= 55) return 'moderate';  // yellow — decent
+    if (score >= 38) return 'high';      // orange — below avg
+    return 'very-high';                  // red    — poor
+  }
+
   function createZoneIcon(zone, size = 36) {
+    const composite = getCompositeScore(zone);
+    const tier = getCompositeTier(composite);
     const el = document.createElement('div');
     el.className = 'zone-marker-wrapper';
     el.innerHTML = `
-      <div class="zone-circle risk-${zone.floodTier}" style="width:${size}px;height:${size}px;line-height:${size}px;font-size:${Math.floor(size * 0.28)}px;">
-        ${zone.floodScore}
+      <div class="zone-circle risk-${tier}" style="width:${size}px;height:${size}px;line-height:${size}px;font-size:${Math.floor(size * 0.28)}px;">
+        ${composite}
       </div>`;
     return L.divIcon({ html: el.outerHTML, className: '', iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
   }
@@ -945,17 +1205,20 @@ const App = (() => {
         const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
         const d = await r.json();
         const a = d.address || {};
-        name = a.amenity || a.building || a.road || a.suburb || a.neighbourhood
-             || d.display_name.split(',')[0] || name;
+        name = a.amenity || a.building || a.road || a.neighbourhood || a.hamlet
+             || a.suburb || d.display_name.split(',')[0] || name;
       } catch (_) {}
 
       state.customWorkLoc = { lat, lng, name };
-      // Update survey input
-      const input = document.getElementById('ob-work-search');
-      if (input) { input.value = name; input.classList.add('ob-location-selected'); }
-      const key = OB_STEPS[obStep]?.key;
-      if (key) obAnswers[key] = 'custom';
-      document.getElementById('ob-next').disabled = false;
+      obAnswers['work'] = 'custom';
+      // Update filter bar work input
+      const fbInput = document.getElementById('fb-work-input');
+      if (fbInput) { fbInput.value = name; fbInput.classList.add('fb-work-selected'); }
+      // Re-open filter bar and hide hint
+      document.getElementById('pick-work-hint')?.classList.add('hidden');
+      document.getElementById('filter-bar')?.classList.add('open');
+      syncFilterChips();
+      updateFilterPills();
       // Update marker tooltip with resolved name
       state._pickPreviewMarker.bindTooltip(name, { permanent: false, direction: 'top' });
       return;
@@ -967,9 +1230,8 @@ const App = (() => {
       return;
     }
 
-    // Normal mode: snap to nearest zone
-    const nearest = findNearestZone(lat, lng);
-    if (nearest) openZoneProfile(nearest);
+    // Normal mode: drop pin at exact clicked location
+    dropPin(lat, lng);
   }
 
   function findNearestZone(lat, lng) {
@@ -1001,7 +1263,12 @@ const App = (() => {
     const content = document.getElementById('sidebar-content');
     const matchScore = state.recommendations.find(r => r.id === zone.id);
 
-    // Stream-proximity score for this zone center
+    // Composite score
+    const composite = getCompositeScore(zone);
+    const compTier = getCompositeTier(composite);
+    const compLabel = composite >= 72 ? 'Excellent' : composite >= 55 ? 'Good' : composite >= 38 ? 'Average' : 'Below Average';
+
+    // Stream-proximity score for flood section
     const streamAnalysis = FloodScorer.analyze(zone.lat, zone.lng);
     const blendedScore = streamAnalysis
       ? FloodScorer.blendedScore(zone.floodScore, streamAnalysis.score)
@@ -1019,7 +1286,21 @@ const App = (() => {
         ${zone.district} · ${zone.elevation} elevation
       </div>
 
-      <!-- Property Rates — lead with what buyers care about -->
+      <!-- Overall Composite Score — shown first -->
+      <div class="profile-section composite-score-section">
+        <div class="section-label">Overall Score</div>
+        <div class="composite-score-row">
+          <div class="composite-score-pill risk-${compTier}">${composite}<span class="composite-score-denom">/100</span></div>
+          <div class="composite-score-meta">
+            <div class="composite-score-label">${compLabel}</div>
+            <div class="composite-score-bar-wrap">
+              <div class="composite-score-bar" style="width:${composite}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Property Rates -->
       <div class="profile-section">
         <div class="section-label">Property Rates</div>
         <div class="price-display">₹${zone.priceMin.toLocaleString('en-IN')} – ₹${zone.priceMax.toLocaleString('en-IN')}<span style="font-size:13px;font-weight:400"> /sqft</span></div>
@@ -1041,13 +1322,6 @@ const App = (() => {
         ${renderNearestTransit(zone.lat, zone.lng)}
       </div>
 
-      <!-- Facilities (loaded async) -->
-      <div class="profile-section" id="facilities-section">
-        <div class="section-label">Nearby Facilities <span style="font-weight:400;color:#9ca3af">(within 2km)</span></div>
-        <div class="facility-loading" id="facilities-loading">Loading facilities...</div>
-        <div class="facilities-grid" id="facilities-grid" style="display:none"></div>
-      </div>
-
       <!-- Area Scores -->
       <div class="profile-section">
         <div class="section-label">Area Scores</div>
@@ -1058,6 +1332,13 @@ const App = (() => {
           ${renderScoreItem(zone.scores.greenery, 'Greenery')}
           ${renderScoreItem(zone.scores.value, 'Value')}
         </div>
+      </div>
+
+      <!-- Facilities (loaded async) -->
+      <div class="profile-section" id="facilities-section">
+        <div class="section-label">Nearby Facilities <span style="font-weight:400;color:#9ca3af">(within 2km)</span></div>
+        <div class="facility-loading" id="facilities-loading">Loading facilities...</div>
+        <div class="facilities-grid" id="facilities-grid" style="display:none"></div>
       </div>
 
       <!-- Best For / Concerns -->
@@ -1072,7 +1353,7 @@ const App = (() => {
         </div>
       </div>
 
-      <!-- Flood Risk — context, not the headline -->
+      <!-- Flood Risk — always last -->
       <div class="flood-block risk-${zone.floodTier}" style="margin-top:4px">
         <div class="flood-label">🛡️ Flood Risk Assessment</div>
         <div class="flood-tier-badge risk-${zone.floodTier}">
@@ -1137,6 +1418,58 @@ const App = (() => {
         </div>`;
     }).join('');
     return rows;
+  }
+
+  // Compute commute times from an exact lat/lng to all standard work hubs
+  function renderPinCommute(lat, lng) {
+    const persona = state.userPersona;
+    const highlightKey = persona?.work && !['wfh', 'other'].includes(persona.work) ? persona.work : null;
+    const dests = [
+      { key: 'omr',      icon: '💻', label: 'IT Corridor (OMR)' },
+      { key: 'guindy',   icon: '🏭', label: 'Guindy Industrial' },
+      { key: 'ambattur', icon: '⚙️', label: 'Ambattur' },
+      { key: 'airport',  icon: '✈️', label: 'Airport' },
+      { key: 'tnagar',   icon: '🛍️', label: 'T Nagar' },
+      { key: 'central',  icon: '🏛️', label: 'Central / Egmore' },
+    ];
+    let rows = '';
+    // Custom work location if set
+    if (highlightKey === 'custom' && state.customWorkLoc) {
+      const t = commuteMinutes(lat, lng, state.customWorkLoc.lat, state.customWorkLoc.lng);
+      rows += `<div class="commute-row">
+        <div class="commute-dest"><span class="commute-dest-icon">📍</span> ${state.customWorkLoc.name}</div>
+        <div class="commute-time highlighted">~${t} min</div>
+      </div>`;
+    }
+    rows += dests.map(dest => {
+      const hub = typeof WORK_ZONES !== 'undefined' && WORK_ZONES[dest.key];
+      if (!hub) return '';
+      const t = commuteMinutes(lat, lng, hub.lat, hub.lng);
+      const isHighlighted = dest.key === highlightKey;
+      return `<div class="commute-row">
+        <div class="commute-dest"><span class="commute-dest-icon">${dest.icon}</span> ${dest.label}</div>
+        <div class="commute-time ${isHighlighted ? 'highlighted' : ''}">~${t} min</div>
+      </div>`;
+    }).filter(Boolean).join('');
+    return rows;
+  }
+
+  // Estimate area scores at exact lat/lng by weighted avg of 3 nearest zones
+  function estimatePinScores(lat, lng) {
+    const withDist = CHENNAI_ZONES.map(z => ({
+      ...z,
+      dist: haversineKm(lat, lng, z.lat, z.lng),
+    })).sort((a, b) => a.dist - b.dist).slice(0, 3);
+
+    const totalW = withDist.reduce((sum, z) => sum + (1 / (z.dist + 0.1)), 0);
+    const keys = ['connectivity', 'amenities', 'schools', 'greenery', 'safety', 'value'];
+    const result = {};
+    keys.forEach(k => {
+      result[k] = Math.round(
+        withDist.reduce((sum, z) => sum + (z.scores[k] || 50) * (1 / (z.dist + 0.1)), 0) / totalW
+      );
+    });
+    return result;
   }
 
   function renderNearestTransit(lat, lng) {
@@ -1430,113 +1763,89 @@ const App = (() => {
     );
   }
 
-  // ── Chennai Metro Layer ────────────────────────────────────
+  // ── Chennai Metro Layer (per-line) ────────────────────────
+  // Phase 2 line definitions: id, color, line GeoJSON var, stations GeoJSON var, label
+  const METRO_LINE_DEFS = [
+    // Blue and Green lines first
+    {
+      id: 'line6', label: 'Blue Line', sublabel: 'Airport ↔ Wimco Nagar',
+      color: '#1d4ed8', fillColor: '#60a5fa', dashArray: '7 4',
+      lineVar: 'json_AirporttoWimcoNagarMetro_10',
+      stnVar:  'json_AirporttoWimcoNagarMetroStations_11',
+    },
+    {
+      id: 'line7', label: 'Green Line', sublabel: 'St Thomas Mount ↔ Central',
+      color: '#16a34a', fillColor: '#4ade80', dashArray: '7 4',
+      lineVar: 'json_StThomasMounttoCentralMetro_12',
+      stnVar:  'json_StThomasMounttoCentralMetroStations_13',
+    },
+    // Phase 2 corridor lines
+    {
+      id: 'line3', label: 'Yellow Line', sublabel: 'Madhavaram ↔ Sholinganallur',
+      color: '#d97706', fillColor: '#fbbf24', dashArray: '7 4',
+      lineVar: 'json_MadhavaramtoSholinganallur_4',
+      stnVar:  'json_MadhavaramtoSholinganallurStations_5',
+    },
+    {
+      id: 'line4', label: 'Pink Line', sublabel: 'Lighthouse ↔ Poonamallee',
+      color: '#db2777', fillColor: '#f472b6', dashArray: '7 4',
+      lineVar: 'json_LighthousetoPoonamalleeMetro_6',
+      stnVar:  'json_LighthousetoPoonamalleeMetroStations_7',
+    },
+    {
+      id: 'line5', label: 'Violet Line', sublabel: 'Madhavaram ↔ SIPCOT',
+      color: '#7c3aed', fillColor: '#a78bfa', dashArray: '7 4',
+      lineVar: 'json_MadhavaramtoSIPCOTMetro_8',
+      stnVar:  'json_MadhavaramtoSIPCOTMetroStations_9',
+    },
+  ];
+
   async function loadMetroLayer() {
-    const group = L.layerGroup();
-    state.metroLayer = group;
-
     // ── Phase 2 lines + stations (local files — immediate) ──
-    const PH2_LINE_VARS = [
-      typeof json_MadhavaramtoSholinganallur_4 !== 'undefined' ? json_MadhavaramtoSholinganallur_4 : null,
-      typeof json_LighthousetoPoonamalleeMetro_6 !== 'undefined' ? json_LighthousetoPoonamalleeMetro_6 : null,
-      typeof json_MadhavaramtoSIPCOTMetro_8 !== 'undefined' ? json_MadhavaramtoSIPCOTMetro_8 : null,
-      typeof json_AirporttoWimcoNagarMetro_10 !== 'undefined' ? json_AirporttoWimcoNagarMetro_10 : null,
-      typeof json_StThomasMounttoCentralMetro_12 !== 'undefined' ? json_StThomasMounttoCentralMetro_12 : null,
-    ].filter(Boolean);
+    METRO_LINE_DEFS.forEach(def => {
+      const group = L.layerGroup();
+      state.metroLayers[def.id] = group;
 
-    PH2_LINE_VARS.forEach(data => {
-      L.geoJson(data, {
-        style: { color: '#8b5cf6', weight: 3.5, opacity: 0.75, dashArray: '7 4' },
-        interactive: false,
-      }).addTo(group);
-    });
+      const lineData = typeof window[def.lineVar] !== 'undefined' ? window[def.lineVar] : null;
+      if (lineData) {
+        L.geoJson(lineData, {
+          style: { color: def.color, weight: 3.5, opacity: 0.8, dashArray: def.dashArray },
+          interactive: false,
+        }).addTo(group);
+      }
 
-    const PH2_STN_VARS = [
-      typeof json_MadhavaramtoSholinganallurStations_5 !== 'undefined' ? json_MadhavaramtoSholinganallurStations_5 : null,
-      typeof json_LighthousetoPoonamalleeMetroStations_7 !== 'undefined' ? json_LighthousetoPoonamalleeMetroStations_7 : null,
-      typeof json_MadhavaramtoSIPCOTMetroStations_9 !== 'undefined' ? json_MadhavaramtoSIPCOTMetroStations_9 : null,
-      typeof json_AirporttoWimcoNagarMetroStations_11 !== 'undefined' ? json_AirporttoWimcoNagarMetroStations_11 : null,
-      typeof json_StThomasMounttoCentralMetroStations_13 !== 'undefined' ? json_StThomasMounttoCentralMetroStations_13 : null,
-    ].filter(Boolean);
-
-    PH2_STN_VARS.forEach(data => {
-      data.features.forEach(f => {
-        if (f.geometry?.type !== 'Point') return;
-        const [lng2, lat2] = f.geometry.coordinates;
-        const name = (f.properties?.Name || 'Metro Stop').trim();
-        state.metroStations.push({ name, lat: lat2, lng: lng2, phase: 2 });
-        L.circleMarker([lat2, lng2], {
-          radius: 4,
-          color: '#fff',
-          fillColor: '#a78bfa',
-          fillOpacity: 0.9,
-          weight: 1.5,
-        })
-        .bindTooltip(
-          `<span class="tt-metro-badge">Ⓜ</span> ${name} <span style="opacity:0.65;font-size:10px">(Ph.2)</span>`,
-          { direction: 'top' }
-        )
-        .addTo(group);
-      });
-    });
-
-    // Show Phase 2 immediately if toggle is on
-    if (document.getElementById('toggle-metro')?.checked) {
-      group.addTo(state.map);
-    }
-
-    // ── Phase 1 lines + stations (Overpass — async) ──
-    const bbox = '12.87,80.09,13.25,80.34';
-    const query =
-      `[out:json][timeout:20];(` +
-      `way["railway"~"subway|light_rail|rail"]["name"~"[Mm]etro|[Cc]hennai"](${bbox});` +
-      `relation["route"~"subway|light_rail"]["name"~"[Mm]etro|[Cc]hennai"](${bbox});` +
-      `node["railway"="station"]["station"~"subway|light_rail"](${bbox});` +
-      `);out geom tags;`;
-
-    try {
-      const resp = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        body: 'data=' + encodeURIComponent(query),
-      });
-      const json = await resp.json();
-
-      json.elements.forEach(el => {
-        if (el.type === 'way' && el.geometry) {
-          const latlngs = el.geometry.map(p => [p.lat, p.lon]);
-          L.polyline(latlngs, { color: '#8b5cf6', weight: 4, opacity: 0.85 }).addTo(group);
-        }
-        if (el.type === 'node' && el.tags?.railway === 'station') {
-          const rawName = el.tags?.name || el.tags?.['name:en'] || '';
-          if (rawName.length < 3) return;
-          const name = rawName;
-          state.metroStations.push({ name, lat: el.lat, lng: el.lon, phase: 1 });
-          L.circleMarker([el.lat, el.lon], {
-            radius: 6,
+      const stnData = typeof window[def.stnVar] !== 'undefined' ? window[def.stnVar] : null;
+      if (stnData) {
+        stnData.features.forEach(f => {
+          if (f.geometry?.type !== 'Point') return;
+          const [lng2, lat2] = f.geometry.coordinates;
+          const name = (f.properties?.Name || 'Metro Stop').trim();
+          state.metroStations.push({ name, lat: lat2, lng: lng2, phase: 2, line: def.id });
+          L.circleMarker([lat2, lng2], {
+            radius: 4,
             color: '#fff',
-            fillColor: '#8b5cf6',
-            fillOpacity: 1,
-            weight: 2,
+            fillColor: def.fillColor,
+            fillOpacity: 0.9,
+            weight: 1.5,
           })
           .bindTooltip(
-            `<span class="tt-metro-badge">Ⓜ</span> ${name}`,
+            `<span class="tt-metro-badge" style="background:${def.color}">Ⓜ</span> ${name} <span style="opacity:0.6;font-size:10px">${def.label}</span>`,
             { direction: 'top' }
           )
           .addTo(group);
-        }
-      });
+        });
+      }
 
-      const ph1Count = json.elements.filter(e => e.type === 'node').length;
-      const ph2Count = state.metroStations.filter(s => s.phase === 2).length;
-      const subEl = document.getElementById('metro-sub');
-      if (subEl) subEl.textContent = `Ph.1: ${ph1Count} stations · Ph.2: ${ph2Count} stops`;
-    } catch (_) {
-      // Non-critical — Phase 2 already loaded
-    }
+      // Auto-show if toggle is checked
+      if (document.getElementById(`toggle-metro-${def.id}`)?.checked) {
+        group.addTo(state.map);
+      }
+    });
+
   }
 
   // ── OSM Locality Discovery ─────────────────────────────────
-  const OSM_LOCALITY_CACHE_KEY = 'csafe_osm_localities_v2';
+  const OSM_LOCALITY_CACHE_KEY = 'csafe_osm_localities_v4'; // bump to re-fetch with wider CMA bbox
   const OSM_LOCALITY_TTL = 24 * 60 * 60 * 1000; // 24h
 
   async function loadOSMLocalities() {
@@ -1552,11 +1861,13 @@ const App = (() => {
       }
     } catch (_) {}
 
-    // Overpass query — all named places in Chennai district bounds
-    const bbox = '12.87,80.09,13.25,80.34';
+    // Overpass query — full Chennai Metropolitan Area bbox
+    // South: 12.55 (below Mahabalipuram), North: 13.45 (above Ponneri),
+    // West: 79.55 (beyond Tirutani), East: 80.36 (coast)
+    const bbox = '12.55,79.55,13.45,80.36';
     const query =
-      `[out:json][timeout:30];(` +
-      `node["place"~"suburb|neighbourhood|quarter|town|village"]["name"](${bbox});` +
+      `[out:json][timeout:45];(` +
+      `node["place"~"suburb|neighbourhood|quarter|town|village|hamlet"]["name"](${bbox});` +
       `way["place"~"suburb|neighbourhood|quarter|town|village"]["name"](${bbox});` +
       `relation["place"~"suburb|neighbourhood|quarter|town|village"]["name"](${bbox});` +
       `);out center tags;`;
@@ -1617,7 +1928,7 @@ const App = (() => {
       );
       marker.on('click', e => {
         L.DomEvent.stopPropagation(e);
-        // Use full dropPin pipeline: places pin marker + 3km buffer + flood score + facilities
+        // Use full dropPin pipeline: places pin marker + 2km buffer + flood score + facilities
         dropPin(loc.lat, loc.lng);
       });
       marker.addTo(state.localityLayer);
@@ -1681,10 +1992,66 @@ const App = (() => {
     }
   }
 
+  // Clip all SVG overlay layers (metro, streams, roads …) to a circle at
+  // (lat, lng) / radiusM metres. Clip is applied to each inner <g> element
+  // (not the <svg> itself) so it stays in sync with Leaflet's pan transforms.
+  function applyBufferClip(lat, lng, radiusM) {
+    removeBufferClip();
+
+    const svg = state.map.getPanes().overlayPane.querySelector('svg');
+    if (!svg) return;
+
+    // Ensure <defs>
+    let defs = svg.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svg.insertBefore(defs, svg.firstChild);
+    }
+
+    const cp = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+    cp.id = 'bufferClip';
+    cp.setAttribute('clipPathUnits', 'userSpaceOnUse');
+    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circ.id = 'bufferClipCircle';
+    cp.appendChild(circ);
+    defs.appendChild(cp);
+
+    function update() {
+      // Update circle in Leaflet layer-point coords (same space as path d=)
+      const cPt = state.map.latLngToLayerPoint([lat, lng]);
+      const ePt = state.map.latLngToLayerPoint([lat + radiusM / 111320, lng]);
+      circ.setAttribute('cx', cPt.x);
+      circ.setAttribute('cy', cPt.y);
+      circ.setAttribute('r', Math.abs(cPt.y - ePt.y));
+      // Apply to every child <g> — handles layers toggled after pin was dropped
+      svg.querySelectorAll(':scope > g').forEach(g => {
+        g.setAttribute('clip-path', 'url(#bufferClip)');
+      });
+    }
+
+    update();
+    state.map.on('move zoom viewreset zoomend moveend', update);
+    state._bufferClipUpdate = update;
+  }
+
+  function removeBufferClip() {
+    if (state._bufferClipUpdate) {
+      state.map.off('move zoom viewreset zoomend moveend', state._bufferClipUpdate);
+      state._bufferClipUpdate = null;
+    }
+    const svg = state.map.getPanes().overlayPane?.querySelector('svg');
+    if (svg) {
+      svg.removeAttribute('clip-path');
+      svg.querySelectorAll(':scope > g').forEach(g => g.removeAttribute('clip-path'));
+      document.getElementById('bufferClip')?.remove();
+    }
+  }
+
   function dropPin(lat, lng) {
-    // Remove previous pin + buffer
+    // Remove previous pin + buffer + clip
     if (state.pinMarker) state.map.removeLayer(state.pinMarker);
     if (state.pinBuffer) state.map.removeLayer(state.pinBuffer);
+    removeBufferClip();
 
     // Custom pin icon
     const pinIcon = L.divIcon({
@@ -1695,15 +2062,18 @@ const App = (() => {
     });
     state.pinMarker = L.marker([lat, lng], { icon: pinIcon, zIndexOffset: 1000 }).addTo(state.map);
 
-    // 3km dashed buffer circle
+    // 2km dashed buffer circle
     state.pinBuffer = L.circle([lat, lng], {
-      radius: 3000,
+      radius: 2000,
       color: '#1a56db',
       fillColor: '#1a56db',
       fillOpacity: 0.05,
       weight: 2,
       dashArray: '7 5',
     }).addTo(state.map);
+
+    // Clip all SVG overlay layers to the 2km buffer circle
+    applyBufferClip(lat, lng, 2000);
 
     // Zoom to fit buffer
     state.map.fitBounds(state.pinBuffer.getBounds(), { padding: [50, 50] });
@@ -1737,12 +2107,28 @@ const App = (() => {
 
   async function reverseGeocode(lat, lng) {
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en&addressdetails=1`;
+      // zoom=14 targets suburb/neighbourhood-level OSM features.
+      // data.name is the actual OSM place name at that point.
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en&addressdetails=1&zoom=14`;
       const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
       const data = await resp.json();
       const a = data.address || {};
-      const short = a.suburb || a.neighbourhood || a.quarter || a.city_district
-                  || a.town || a.village || data.display_name.split(',')[0];
+
+      // Filter out utility/administrative tags (CMWSSB Division, Ward #, etc.)
+      const isAdminTag = v => v && /\b(division|ward|zone|block|sector|taluk)\b[\s\-]*\d/i.test(v);
+
+      // 1st choice: OSM feature name at zoom=14 (e.g. "Vyasarpadi")
+      // 2nd choice: address sub-fields, most-specific first
+      // 3rd choice: first part of display_name — only if not an admin tag
+      const addrFallback = [a.neighbourhood, a.hamlet, a.village, a.suburb,
+                            a.quarter, a.city_district, a.town]
+                           .find(v => v && !isAdminTag(v));
+      const displayFirst = data.display_name.split(',')[0];
+      const short = (!isAdminTag(data.name) && data.name)
+                  || addrFallback
+                  || (!isAdminTag(displayFirst) && displayFirst)
+                  || data.display_name.split(',').find(p => !isAdminTag(p.trim()))?.trim()
+                  || 'Custom Location';
       const district = a.city_district || a.county || a.state_district || '';
       const pincode = a.postcode || '';
       return { short, district, pincode };
@@ -1756,20 +2142,72 @@ const App = (() => {
     const tierLabel = streamData ? floodTierLabel(streamData.tier) : '—';
     const score = streamData ? streamData.score : '—';
 
+    // Estimated composite from nearby zones
+    const pinScores = estimatePinScores(lat, lng);
+    const pinComposite = Math.round(
+      (pinScores.connectivity + pinScores.amenities + pinScores.schools +
+       pinScores.greenery + pinScores.safety + pinScores.value) / 6
+    );
+    const pinCompTier = getCompositeTier(pinComposite);
+    const pinCompLabel = pinComposite >= 72 ? 'Excellent' : pinComposite >= 55 ? 'Good' : pinComposite >= 38 ? 'Average' : 'Below Average';
+
     document.getElementById('sidebar-content').innerHTML = `
-      <div class="pin-mode-hint">📍 Custom pin — 3km buffer active</div>
+      <div class="pin-mode-hint">📍 Custom pin — 2km buffer active</div>
       <div class="zone-name">${address.short || 'Custom Location'}</div>
       ${address.district
         ? `<div class="zone-district"><span>🗺</span>${address.district}${address.pincode ? ' · PIN ' + address.pincode : ''}</div>`
         : ''}
       <div class="pin-coords-chip">
         🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}
-        <span class="pin-radius-note">· 3km buffer</span>
+        <span class="pin-radius-note">· 2km buffer</span>
       </div>
 
-      <!-- Flood Score -->
-      <div class="flood-block ${tierClass}">
-        <div class="flood-label">🌊 Flood Safety Score</div>
+      <!-- Estimated Overall Score — first, matching zone profile -->
+      <div class="profile-section composite-score-section">
+        <div class="section-label">Estimated Overall Score <span style="font-weight:400;color:#9ca3af">(interpolated)</span></div>
+        <div class="composite-score-row">
+          <div class="composite-score-pill risk-${pinCompTier}">${pinComposite}<span class="composite-score-denom">/100</span></div>
+          <div class="composite-score-meta">
+            <div class="composite-score-label">${pinCompLabel}</div>
+            <div class="composite-score-bar-wrap">
+              <div class="composite-score-bar" style="width:${pinComposite}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Commute Times -->
+      <div class="profile-section">
+        <div class="section-label">Commute Times (by road)</div>
+        ${renderPinCommute(lat, lng)}
+      </div>
+
+      <!-- Nearest Transit -->
+      <div class="profile-section">
+        <div class="section-label">Nearest Transit</div>
+        ${renderNearestTransit(lat, lng)}
+      </div>
+
+      <!-- Estimated Area Scores -->
+      <div class="profile-section">
+        <div class="section-label">Area Scores <span style="font-weight:400;color:#9ca3af">(interpolated)</span></div>
+        <div class="scores-grid">
+          ${['connectivity','amenities','schools','greenery','safety','value'].map(k =>
+            renderScoreItem(pinScores[k], k.charAt(0).toUpperCase()+k.slice(1))
+          ).join('')}
+        </div>
+      </div>
+
+      <!-- Facilities (loaded async) -->
+      <div class="profile-section" id="pin-fac-section">
+        <div class="section-label">Nearby Facilities <span style="font-weight:400;color:#9ca3af">(within 2km via OSM)</span></div>
+        <div class="facility-loading" id="pin-fac-loading">Loading from OpenStreetMap…</div>
+        <div class="facilities-grid" id="pin-fac-grid" style="display:none"></div>
+      </div>
+
+      <!-- Flood Score — always last -->
+      <div class="flood-block ${tierClass}" style="margin-top:4px">
+        <div class="flood-label">🛡️ Flood Risk Assessment</div>
         ${streamData ? `
           <div class="flood-tier-badge ${tierClass}">
             ${tierLabel}
@@ -1781,13 +2219,6 @@ const App = (() => {
           <div class="flood-note">Computed from ALOS PALSAR DEM stream network</div>
           <div class="flood-events" style="color:inherit;opacity:0.65">📍 Nearest stream: ${streamData.distLabel} away</div>
         ` : '<div class="flood-note">Stream data unavailable</div>'}
-      </div>
-
-      <!-- Facilities (loaded async) -->
-      <div class="profile-section" id="pin-fac-section">
-        <div class="section-label">Nearby Facilities <span style="font-weight:400;color:#9ca3af">(within 3km via OSM)</span></div>
-        <div class="facility-loading" id="pin-fac-loading">Loading from OpenStreetMap…</div>
-        <div class="facilities-grid" id="pin-fac-grid" style="display:none"></div>
       </div>
 
       <!-- Actions -->
@@ -1807,7 +2238,7 @@ const App = (() => {
   }
 
   async function loadPinFacilities(lat, lng) {
-    const r = 3000;
+    const r = 2000;
     const query = `[out:json][timeout:25];(node["amenity"~"hospital|clinic|school|college|bank|pharmacy"](around:${r},${lat},${lng});node["shop"="supermarket"](around:${r},${lat},${lng});node["leisure"="park"](around:${r},${lat},${lng});way["leisure"="park"](around:${r},${lat},${lng});node["railway"="station"](around:${r},${lat},${lng}););out tags;`;
     const loadingEl = document.getElementById('pin-fac-loading');
     const gridEl = document.getElementById('pin-fac-grid');
@@ -1844,6 +2275,7 @@ const App = (() => {
   function clearPin() {
     if (state.pinMarker) { state.map.removeLayer(state.pinMarker); state.pinMarker = null; }
     if (state.pinBuffer) { state.map.removeLayer(state.pinBuffer); state.pinBuffer = null; }
+    removeBufferClip();
     state._pinData = null;
     document.getElementById('sidebar').classList.remove('open');
   }
@@ -1860,7 +2292,7 @@ const App = (() => {
       `📍 ${address.short || 'Custom Location'}${address.district ? ', ' + address.district : ''}\n` +
       `🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}\n\n` +
       `Flood Risk: ${tier} (${score})\n${dist}` +
-      `Analysis radius: 3km\n\n` +
+      `Analysis radius: 2km\n\n` +
       `Check flood risk before buying property 👇\nchennaifloods.in`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   }
@@ -1928,12 +2360,15 @@ const App = (() => {
   }
 
   // ── Public API ─────────────────────────────────────────────
+  // Expose these so pick-mode map-click handler can call them directly
+  // (they are already in scope within the IIFE, so just declare access points)
+
   return {
     init(streamData) {
       if (streamData) FloodScorer.init(streamData);
       initMap(streamData);
       initSearch();
-      initOnboarding();
+      initFilterBar();
 
       // Sidebar close
       document.getElementById('sidebar-close').addEventListener('click', () => {
