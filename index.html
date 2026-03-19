@@ -18,7 +18,7 @@
   <!-- ═══════════════════════════════════════
        ONBOARDING WIZARD
   ════════════════════════════════════════ -->
-  <div id="onboarding" class="onboarding-overlay">
+  <div id="onboarding" class="onboarding-overlay hidden">
     <!-- Floating hint shown during pick-from-map mode -->
     <div class="ob-pick-floating-hint" id="ob-pick-floating-hint">
       📌 Click anywhere on the map to set your work location
@@ -55,6 +55,7 @@
     <div class="header-brand">
       <span class="brand-icon">📍</span>
       <span class="brand-name">Find Your Ideal Location</span>
+      <button class="info-btn" id="info-btn" title="About this tool" aria-label="About">ℹ</button>
     </div>
 
     <div class="search-container">
@@ -76,6 +77,41 @@
       <button class="btn-primary" id="my-picks-btn">⭐ My Picks</button>
     </div>
   </header>
+
+  <!-- ═══════════════════════════════════════
+       INFO PANEL
+  ════════════════════════════════════════ -->
+  <div id="info-panel" class="info-panel hidden">
+    <div class="info-panel-inner">
+      <button class="info-panel-close" id="info-panel-close">✕</button>
+      <div class="info-panel-logo">📍</div>
+      <div class="info-panel-title">Find Your Ideal Location in Chennai</div>
+      <div class="info-panel-tagline">Compare property rates, commute times, flood risk &amp; neighbourhood scores across Chennai before buying.</div>
+      <div class="info-panel-sections">
+        <div class="info-section">
+          <div class="info-section-head">🏠 What You Can Do</div>
+          <ul class="info-list">
+            <li>Browse <strong>zone markers</strong> — colour-coded by composite liveability score</li>
+            <li>Click any zone for flood risk, commute times, transit &amp; nearby facilities</li>
+            <li>Drop a custom pin anywhere on the map for an instant area report</li>
+            <li>Set your preferences in the <strong>Preferences bar</strong> to get personalised Top Picks</li>
+            <li>Toggle flood streams, metro lines, roads &amp; employment hotspots via the Layers menu</li>
+          </ul>
+        </div>
+        <div class="info-section">
+          <div class="info-section-head">📊 Data Sources</div>
+          <ul class="info-list">
+            <li><strong>Flood risk</strong> — ALOS PALSAR 12.5m DEM stream network</li>
+            <li><strong>Property rates</strong> — TN Registration Dept. guideline values</li>
+            <li><strong>Commute estimates</strong> — Haversine × 1.35 road factor at 20 km/h peak avg</li>
+            <li><strong>Facilities</strong> — OpenStreetMap Overpass API (live query)</li>
+            <li><strong>Metro lines</strong> — CMRL Phase 1, 2 &amp; approved Phase 3 corridors</li>
+          </ul>
+        </div>
+      </div>
+      <div class="info-panel-footer">Built for Chennai home-buyers · Data last updated 2025</div>
+    </div>
+  </div>
 
   <!-- ═══════════════════════════════════════
        MAP
@@ -153,14 +189,52 @@
         </svg>
       </button>
     </div>
+
+    <!-- Metro Rail — per-line toggles -->
+    <div class="layer-section-divider">Metro Rail</div>
     <label class="layer-item">
-      <input type="checkbox" id="toggle-metro" />
-      <span class="layer-dot" style="background:#8b5cf6;border-radius:50%"></span>
+      <input type="checkbox" id="toggle-metro-line6" />
+      <span class="layer-dot" style="background:#1d4ed8;border-radius:3px"></span>
       <span class="layer-item-text">
-        <span class="layer-item-name">Metro Rail</span>
-        <span class="layer-item-sub" id="metro-sub">Phase 1 &amp; 2 lines + stations</span>
+        <span class="layer-item-name">Blue Line</span>
+        <span class="layer-item-sub">Airport ↔ Wimco Nagar</span>
       </span>
     </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-metro-line7" />
+      <span class="layer-dot" style="background:#16a34a;border-radius:3px"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Green Line</span>
+        <span class="layer-item-sub">St Thomas Mount ↔ Central</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-metro-line3" />
+      <span class="layer-dot" style="background:#d97706;border-radius:3px"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Yellow Line</span>
+        <span class="layer-item-sub">Madhavaram ↔ Sholinganallur</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-metro-line4" />
+      <span class="layer-dot" style="background:#db2777;border-radius:3px"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Pink Line</span>
+        <span class="layer-item-sub">Lighthouse ↔ Poonamallee</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-metro-line5" />
+      <span class="layer-dot" style="background:#7c3aed;border-radius:3px"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Violet Line</span>
+        <span class="layer-item-sub">Madhavaram ↔ SIPCOT</span>
+      </span>
+    </label>
+
+    <!-- Transport & Roads -->
+    <div class="layer-section-divider">Transport &amp; Roads</div>
     <label class="layer-item">
       <input type="checkbox" id="toggle-bus-terminus" />
       <span class="layer-dot" style="background:#0d9488;border-radius:50%"></span>
@@ -201,12 +275,15 @@
         <span class="layer-item-sub">NH road network</span>
       </span>
     </label>
+
+    <!-- Zones & Places -->
+    <div class="layer-section-divider">Zones &amp; Places</div>
     <label class="layer-item">
       <input type="checkbox" id="toggle-zones" checked />
       <span class="layer-dot" style="background:linear-gradient(135deg,#16a34a,#dc2626)"></span>
       <span class="layer-item-text">
         <span class="layer-item-name">Zone Markers</span>
-        <span class="layer-item-sub">Property zones by area</span>
+        <span class="layer-item-sub">Property zones — composite score</span>
       </span>
     </label>
     <label class="layer-item">
@@ -217,12 +294,16 @@
         <span class="layer-item-sub" id="localities-sub">Loading from OpenStreetMap…</span>
       </span>
     </label>
-    <div class="layer-section-divider">Basemap</div>
-    <div class="basemap-switcher">
-      <button class="bm-btn active" data-bm="hybrid">🛰️ Hybrid</button>
-      <button class="bm-btn" data-bm="normal">🗺️ Normal</button>
-      <button class="bm-btn" data-bm="osm">🌍 OSM</button>
-    </div>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-employment" />
+      <span class="layer-dot" style="background:linear-gradient(135deg,#2563eb,#f97316,#16a34a)"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Employment Hotspots</span>
+        <span class="layer-item-sub">IT 💻 · Manufacturing 🏭 · Govt 🏛️</span>
+      </span>
+    </label>
+
+    <!-- Flood & Terrain -->
     <div class="layer-section-divider">Flood &amp; Terrain</div>
     <label class="layer-item">
       <input type="checkbox" id="toggle-streams" />
@@ -248,6 +329,57 @@
         <span class="layer-item-sub">ALOS PALSAR terrain data</span>
       </span>
     </label>
+
+    <!-- Basemap (at the very end) -->
+    <div class="layer-section-divider">Basemap</div>
+    <div class="basemap-switcher">
+      <button class="bm-btn active" data-bm="hybrid">🛰️ Hybrid</button>
+      <button class="bm-btn" data-bm="normal">🗺️ Normal</button>
+      <button class="bm-btn" data-bm="osm">🌍 OSM</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PICK-WORK FLOATING HINT (standalone)
+  ════════════════════════════════════════ -->
+  <div id="pick-work-hint" class="hidden">
+    📌 Click anywhere on the map to set your work location
+    <button id="pick-work-cancel">Cancel</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       FILTER BAR — persistent bottom filters
+  ════════════════════════════════════════ -->
+  <div id="filter-bar">
+    <!-- Panel (grows upward, hidden when collapsed) -->
+    <div class="fb-panel" id="fb-panel">
+      <div class="fb-panel-inner">
+        <div id="fb-groups"></div>
+        <!-- Work location search (shown below work group) -->
+        <div class="fb-work-search-wrap" id="fb-work-search-wrap">
+          <div class="fb-work-search-label">— or pinpoint your exact workplace —</div>
+          <div class="fb-work-row">
+            <input id="fb-work-input" type="text" class="fb-work-input"
+              placeholder="e.g. DLF IT Park, Perungudi…"
+              autocomplete="off" spellcheck="false"/>
+            <button id="fb-pick-map-btn" class="fb-pick-map-btn">📌 Pick</button>
+          </div>
+          <div id="fb-work-dropdown" class="fb-work-dropdown"></div>
+        </div>
+        <!-- Actions -->
+        <div class="fb-actions">
+          <button id="fb-apply-btn" class="fb-apply-btn">✓ Show My Best Zones</button>
+          <button id="fb-reset-btn" class="fb-reset-btn">Reset</button>
+        </div>
+      </div>
+    </div>
+    <!-- Tab strip — always visible at the bottom -->
+    <div class="fb-tab" id="fb-tab">
+      <span class="fb-tab-icon">🎯</span>
+      <span class="fb-tab-label">Preferences</span>
+      <div class="fb-pills-row" id="fb-pills-row"></div>
+      <span class="fb-chevron" id="fb-chevron">▲</span>
+    </div>
   </div>
 
   <!-- ═══════════════════════════════════════
