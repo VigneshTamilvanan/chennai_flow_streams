@@ -1,5 +1,5 @@
 // ============================================================
-// ChennaiSafe — Stream-Proximity Flood Scorer
+// IllamAI — Stream-Proximity Flood Scorer
 // Computes real-time flood risk for any lat/lng using the
 // actual stream GeoJSON derived from ALOS PALSAR DEM data.
 // ============================================================
