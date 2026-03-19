@@ -39,6 +39,13 @@ const App = (() => {
     busTermini: [],       // [{name, lat, lng}]
     // Custom work location (from survey text input)
     customWorkLoc: null,  // { lat, lng, name }
+    // Work location map marker (shown after survey, removed on retake)
+    workMarker: null,
+    // Top Picks sort mode: 'score' | 'commute' | 'price'
+    recoSort: 'score',
+    // Basemap tile layers for switcher
+    baseLayers: {},
+    activeBasemap: 'hybrid',
   };
 
   // ── Haversine travel-time helper ───────────────────────────
@@ -83,6 +90,13 @@ const App = (() => {
     { name: 'Kilambakkam', lat: 12.8635, lng: 80.0698 },
   ];
 
+  // Major train terminals — always shown as reference distances
+  const MAJOR_TRAIN_TERMINALS = [
+    { name: 'Chennai Central', lat: 13.0827, lng: 80.2707 },
+    { name: 'Chennai Egmore',  lat: 13.0784, lng: 80.2621 },
+    { name: 'Tambaram',        lat: 12.9252, lng: 80.1273 },
+  ];
+
   // Find nearest transit stop of each type for a given lat/lng
   function findNearestTransit(lat, lng) {
     function nearestInList(list) {
@@ -97,11 +111,16 @@ const App = (() => {
       const km = haversineKm(lat, lng, h.lat, h.lng);
       return { ...h, km, minutes: transitMinutes(km) };
     });
+    const trainHubs = MAJOR_TRAIN_TERMINALS.map(t => {
+      const km = haversineKm(lat, lng, t.lat, t.lng);
+      return { ...t, km, minutes: transitMinutes(km) };
+    }).sort((a, b) => a.km - b.km);
     return {
       metro: nearestInList(state.metroStations),
       suburban: nearestInList(state.suburbStations),
       busNearest: nearestInList(state.busTermini),
       busHubs,
+      trainHubs,
     };
   }
 
@@ -216,26 +235,38 @@ const App = (() => {
       grid.appendChild(btn);
     });
 
-    // Custom location search box (work step only)
+    // Custom location search box + pick from map (work step only)
     if (step.hasLocationSearch) {
       const searchWrap = document.createElement('div');
       searchWrap.className = 'ob-location-search';
       const savedName = state.customWorkLoc?.name || '';
       const savedSelected = obAnswers[step.key] === 'custom';
       searchWrap.innerHTML = `
-        <div class="ob-location-label">— or type your exact workplace —</div>
-        <div class="ob-location-input-wrap">
-          <input id="ob-work-search" type="text" placeholder="e.g. DLF IT Park, Perungudi…"
-            value="${savedName}"
-            class="${savedSelected ? 'ob-location-selected' : ''}"
-            autocomplete="off" spellcheck="false"/>
+        <div class="ob-location-label">— or pinpoint your exact workplace —</div>
+        <div class="ob-location-row">
+          <div class="ob-location-input-wrap" style="flex:1">
+            <input id="ob-work-search" type="text" placeholder="e.g. DLF IT Park, Perungudi…"
+              value="${savedName}"
+              class="${savedSelected ? 'ob-location-selected' : ''}"
+              autocomplete="off" spellcheck="false"/>
+          </div>
+          <button id="ob-pick-map-btn" class="ob-pick-map-btn" title="Pick location on map">
+            📌 Pick from map
+          </button>
         </div>
         <div id="ob-work-dropdown" class="ob-work-dropdown"></div>
+        <div id="ob-pick-map-hint" class="ob-pick-map-hint hidden">
+          Click anywhere on the map to set your work location
+          <button id="ob-pick-cancel" class="ob-pick-cancel">Cancel</button>
+        </div>
       `;
       grid.appendChild(searchWrap);
 
       const input = searchWrap.querySelector('#ob-work-search');
       const dropEl = searchWrap.querySelector('#ob-work-dropdown');
+      const pickBtn = searchWrap.querySelector('#ob-pick-map-btn');
+      const pickHint = searchWrap.querySelector('#ob-pick-map-hint');
+      const pickCancel = searchWrap.querySelector('#ob-pick-cancel');
       let searchTimer = null;
 
       input.addEventListener('input', () => {
@@ -246,6 +277,18 @@ const App = (() => {
         if (q.length < 2) return;
         searchTimer = setTimeout(() => obWorkNominatimSearch(q, input, dropEl), 400);
       });
+
+      // "Pick from map" — hide survey card, show full map, floating cancel bar
+      pickBtn.addEventListener('click', () => {
+        state._pickingWorkLoc = true;
+        document.getElementById('onboarding').classList.add('ob-picking');
+      });
+
+      pickCancel.addEventListener('click', cancelPickMode);
+
+      // Also wire the floating cancel button in the overlay
+      const floatingCancel = document.getElementById('ob-pick-floating-cancel');
+      if (floatingCancel) floatingCancel.addEventListener('click', cancelPickMode);
     }
 
     // Progress dots
@@ -260,6 +303,16 @@ const App = (() => {
     const nextBtn = document.getElementById('ob-next');
     nextBtn.disabled = !obAnswers[step.key];
     nextBtn.textContent = obStep === OB_STEPS.length - 1 ? 'Show My Matches →' : 'Next →';
+  }
+
+  function cancelPickMode() {
+    state._pickingWorkLoc = false;
+    document.getElementById('onboarding').classList.remove('ob-picking');
+    // Remove temporary pick marker if cancelled without confirming
+    if (state._pickPreviewMarker) {
+      state._pickPreviewMarker.remove();
+      state._pickPreviewMarker = null;
+    }
   }
 
   async function obWorkNominatimSearch(q, input, dropEl) {
@@ -323,6 +376,26 @@ const App = (() => {
   function finishOnboarding() {
     state.userPersona = { ...obAnswers };
     document.getElementById('onboarding').classList.add('hidden');
+
+    // Remove pick preview marker (replaced by permanent work marker below)
+    if (state._pickPreviewMarker) { state._pickPreviewMarker.remove(); state._pickPreviewMarker = null; }
+    // Place / refresh work location marker on the map
+    if (state.workMarker) { state.workMarker.remove(); state.workMarker = null; }
+    if (state.userPersona.work === 'custom' && state.customWorkLoc) {
+      const workIcon = L.divIcon({
+        className: '',
+        html: `<div class="work-pin">💼 Work</div>`,
+        iconSize: [72, 28],
+        iconAnchor: [36, 28],
+      });
+      state.workMarker = L.marker(
+        [state.customWorkLoc.lat, state.customWorkLoc.lng],
+        { icon: workIcon, zIndexOffset: 900 }
+      )
+        .addTo(state.map)
+        .bindTooltip(state.customWorkLoc.name, { permanent: false, direction: 'top' });
+    }
+
     state.recommendations = computeRecommendations(state.userPersona);
     highlightRecommendations();
     showRecoPanel();
@@ -331,7 +404,38 @@ const App = (() => {
 
   // ── Recommendations Engine ─────────────────────────────────
   function computeRecommendations(persona) {
-    const scored = CHENNAI_ZONES.map(zone => {
+    // Commute tolerance ceiling (minutes)
+    const TOLERANCE_MAX = { 'under-20': 20, '20-40': 40, '40-60': 60, 'over-60': 999 };
+    const toleranceMax = TOLERANCE_MAX[persona.commute_tolerance] ?? 999;
+
+    // Budget ceiling per sqft
+    const BUDGET_CEIL = { 'under-4k': 4000, '4k-7k': 7000, '7k-12k': 12000, 'above-12k': Infinity };
+    const budgetCeil = BUDGET_CEIL[persona.budget] ?? Infinity;
+
+    // Work destination
+    const workKey = persona.work === 'wfh' || persona.work === 'other' ? null : persona.work;
+    const customLat = workKey === 'custom' ? state.customWorkLoc?.lat : null;
+    const customLng = workKey === 'custom' ? state.customWorkLoc?.lng : null;
+
+    // Pre-compute tWork for all zones (needed for pre-filter + sort)
+    const withCommute = CHENNAI_ZONES.map(zone => ({
+      ...zone,
+      tWork: workKey ? getCommute(zone, workKey, customLat, customLng) : null,
+    }));
+
+    // Pre-filter: exclude zones that far exceed commute tolerance
+    // Relax threshold if too few zones survive, then remove cap entirely
+    let filtered = withCommute;
+    if (workKey && toleranceMax < 999) {
+      const strict  = withCommute.filter(z => z.tWork == null || z.tWork <= toleranceMax * 1.5);
+      const relaxed = withCommute.filter(z => z.tWork == null || z.tWork <= toleranceMax * 2.0);
+      if      (strict.length  >= 3) filtered = strict;
+      else if (relaxed.length >= 3) filtered = relaxed;
+      // else filtered = withCommute (no filter, show all)
+    }
+
+    const scored = filtered.map(zone => {
+      const { tWork } = zone;
       let score = 0;
       const reasons = [];
 
@@ -341,18 +445,20 @@ const App = (() => {
       if (persona.budget === '4k-7k' && avgPrice <= 7500) { score += 25; reasons.push('Good value'); }
       if (persona.budget === '7k-12k' && avgPrice <= 12500) { score += 20; }
       if (persona.budget === 'above-12k') score += 15;
+      // Extra penalty for zones way over budget
+      if (budgetCeil < Infinity && avgPrice > budgetCeil * 1.4) score -= 20;
 
-      // Work proximity (haversine-computed)
-      const workKey = persona.work === 'wfh' || persona.work === 'other' ? null : persona.work;
-      const customLat = workKey === 'custom' ? state.customWorkLoc?.lat : null;
-      const customLng = workKey === 'custom' ? state.customWorkLoc?.lng : null;
-      const tWork = workKey ? getCommute(zone, workKey, customLat, customLng) : null;
+      // Work proximity — tiered scoring
+      // Zones at/near the work location get a strong priority boost
       if (tWork !== null) {
-        if (tWork <= 15) { score += 30; reasons.push(`~${tWork} min to work`); }
-        else if (tWork <= 25) { score += 20; reasons.push(`~${tWork} min to work`); }
-        else if (tWork <= 35) score += 10;
+        if      (tWork <= 8)  { score += 60; reasons.push(`Live where you work (${tWork} min)`); }
+        else if (tWork <= 15) { score += 35; reasons.push(`~${tWork} min to work`); }
+        else if (tWork <= 25) { score += 25; reasons.push(`~${tWork} min to work`); }
+        else if (tWork <= 35) { score += 15; }
+        else if (tWork <= 50) { score += 5; }
+        // > 50 min → 0 pts
       } else if (!workKey) {
-        score += 15; // WFH doesn't penalize
+        score += 15; // WFH — no commute penalty
       }
 
       // Family
@@ -374,15 +480,22 @@ const App = (() => {
       if (persona.priority === 'schools' && zone.scores.schools >= 80) { score += 25; reasons.push('Top-rated schools'); }
       if (persona.priority === 'greenery' && zone.scores.greenery >= 70) { score += 25; reasons.push('Green & open'); }
 
-      // Commute tolerance
-      if (tWork !== null) {
-        if (persona.commute_tolerance === 'under-20' && tWork > 20) score -= 15;
-        if (persona.commute_tolerance === '20-40' && tWork > 40) score -= 10;
-        if (persona.commute_tolerance === 'under-20' && tWork <= 20) { score += 15; reasons.push(`Only ~${tWork} min commute`); }
-        if (persona.commute_tolerance === '20-40' && tWork <= 40) score += 8;
+      // Commute tolerance — progressive penalty (replaces flat -15)
+      if (tWork !== null && toleranceMax < 999) {
+        const overage = tWork - toleranceMax;
+        if (overage > 0) {
+          // -5 pts per 10 min over tolerance, max penalty -60
+          const penalty = Math.min(60, Math.floor(overage / 10) * 5 + 5);
+          score -= penalty;
+        } else {
+          // Bonus for fitting comfortably within tolerance
+          if (persona.commute_tolerance === 'under-20') { score += 15; reasons.push(`Only ~${tWork} min commute`); }
+          else if (persona.commute_tolerance === '20-40') score += 8;
+          else if (persona.commute_tolerance === '40-60') score += 5;
+        }
       }
 
-      return { ...zone, matchScore: score, reasons };
+      return { ...zone, tWork, matchScore: score, reasons };
     });
 
     return scored.sort((a, b) => b.matchScore - a.matchScore).slice(0, 6);
@@ -437,13 +550,81 @@ const App = (() => {
     list.innerHTML = '';
     panel.classList.add('ready'); // enables peek mode
 
-    state.recommendations.forEach((zone, i) => {
+    // Sort bar — placed in the header, not the scroll list
+    let sortBar = panel.querySelector('.sort-bar');
+    if (!sortBar) {
+      sortBar = document.createElement('div');
+      sortBar.className = 'sort-bar';
+      const lbl = document.createElement('span');
+      lbl.className = 'sort-bar-label';
+      lbl.textContent = 'Sort:';
+      sortBar.appendChild(lbl);
+      const sortBtns = [
+        { key: 'score',   label: '⭐ Score' },
+        { key: 'commute', label: '🕐 Commute' },
+        { key: 'price',   label: '💰 Price' },
+      ];
+      sortBtns.forEach(({ key, label }) => {
+        const btn = document.createElement('button');
+        btn.dataset.sort = key;
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+          state.recoSort = key;
+          // Update active state without full re-render
+          sortBar.querySelectorAll('.sort-btn').forEach(b =>
+            b.classList.toggle('active', b.dataset.sort === key)
+          );
+          _renderRecoCards(list, state.recoSort);
+        });
+        sortBar.appendChild(btn);
+      });
+      // Insert after the reco-header
+      const header = panel.querySelector('.reco-header');
+      header.insertAdjacentElement('afterend', sortBar);
+    }
+    // Sync active button
+    sortBar.querySelectorAll('button[data-sort]').forEach(b =>
+      b.classList.toggle('sort-btn', true) ||
+      b.classList.toggle('active', b.dataset.sort === state.recoSort)
+    );
+
+    _renderRecoCards(list, state.recoSort);
+    panel.classList.add('open');
+    document.body.classList.add('reco-open');
+  }
+
+  function _renderRecoCards(list, sortKey) {
+    // Remove existing cards only (keep sort bar if it's in the list)
+    list.querySelectorAll('.reco-card').forEach(c => c.remove());
+
+    const panel = document.getElementById('reco-panel');
+    let sorted = [...state.recommendations];
+    if (sortKey === 'commute') {
+      sorted.sort((a, b) => {
+        if (a.tWork == null && b.tWork == null) return 0;
+        if (a.tWork == null) return 1;
+        if (b.tWork == null) return -1;
+        return a.tWork - b.tWork;
+      });
+    } else if (sortKey === 'price') {
+      sorted.sort((a, b) =>
+        ((a.priceMin + a.priceMax) / 2) - ((b.priceMin + b.priceMax) / 2)
+      );
+    }
+
+    sorted.forEach((zone, i) => {
       const card = document.createElement('div');
       card.className = 'reco-card' + (i === 0 ? ' top-pick' : '');
+      const commuteBadge = zone.tWork != null
+        ? `<span class="reco-commute">🕐 ~${zone.tWork} min</span>`
+        : '';
       card.innerHTML = `
         <div class="reco-rank">${i === 0 ? '⭐ Best Match' : `#${i + 1} Pick`}</div>
         <div class="reco-zone-name">${zone.name}</div>
-        <span class="reco-flood-badge risk-${zone.floodTier}">${floodTierLabel(zone.floodTier)}</span>
+        <div class="reco-badges">
+          <span class="reco-flood-badge risk-${zone.floodTier}">${floodTierLabel(zone.floodTier)}</span>
+          ${commuteBadge}
+        </div>
         <div class="reco-price">₹${zone.priceMin.toLocaleString('en-IN')} – ${zone.priceMax.toLocaleString('en-IN')}/sqft</div>
         <div class="reco-why">${zone.reasons.slice(0, 2).join(' · ')}</div>
       `;
@@ -451,14 +632,17 @@ const App = (() => {
         flyToZone(zone);
         openZoneProfile(zone);
         panel.classList.remove('open');
+        document.body.classList.remove('reco-open');
       });
       list.appendChild(card);
     });
-
-    panel.classList.add('open');
   }
 
   function retakeQuiz() {
+    // Remove work location marker + pick preview
+    if (state.workMarker) { state.workMarker.remove(); state.workMarker = null; }
+    if (state._pickPreviewMarker) { state._pickPreviewMarker.remove(); state._pickPreviewMarker = null; }
+
     // Reset quiz state
     obStep = 0;
     // Save previous picks so skip can restore them
@@ -498,17 +682,52 @@ const App = (() => {
       '<a href="https://leafletjs.com">Leaflet</a>'
     );
 
-    // Base layer — OSM
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // ── Basemap tile layers ─────────────────────────────────
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 20,
       attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
-    }).addTo(state.map);
-
-    // Google hybrid on top
-    const googleHybrid = L.tileLayer(
+    });
+    const hybridLayer = L.tileLayer(
       'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
       { opacity: 0.65, maxNativeZoom: 20, maxZoom: 28, attribution: '© Google' }
-    ).addTo(state.map);
+    );
+    const normalLayer = L.tileLayer(
+      'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+      { maxNativeZoom: 20, maxZoom: 28, attribution: '© Google' }
+    );
+
+    // Default: OSM + Google Hybrid (same as before)
+    osmLayer.addTo(state.map);
+    hybridLayer.addTo(state.map);
+
+    // Store for basemap switcher
+    state.baseLayers = { osm: osmLayer, hybrid: hybridLayer, normal: normalLayer };
+    state.activeBasemap = 'hybrid';
+
+    // Basemap switcher button handlers
+    document.querySelectorAll('.bm-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const bm = btn.dataset.bm;
+        if (bm === state.activeBasemap) return;
+        // Remove all base layers
+        [osmLayer, hybridLayer, normalLayer].forEach(l => {
+          if (state.map.hasLayer(l)) state.map.removeLayer(l);
+        });
+        // Apply selected basemap
+        if (bm === 'hybrid') {
+          osmLayer.addTo(state.map);
+          hybridLayer.addTo(state.map);
+        } else if (bm === 'normal') {
+          normalLayer.addTo(state.map);
+        } else {
+          osmLayer.addTo(state.map);
+        }
+        state.activeBasemap = bm;
+        document.querySelectorAll('.bm-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.bm === bm)
+        );
+      });
+    });
 
     // DEM overlay — off by default, user enables via layer panel
     const demBounds = [[12.469166667, 79.55], [13.5625, 80.348333333]];
@@ -568,10 +787,7 @@ const App = (() => {
             fillOpacity: 0.9,
             weight: 1.5,
           })
-          .bindTooltip(
-            `<div class="zone-tooltip"><div class="zone-tooltip-name">🚉 ${name}</div></div>`,
-            { direction: 'top', className: 'zone-tooltip-wrap' }
-          )
+          .bindTooltip(`🚉 ${name}`, { direction: 'top' })
           .addTo(state.suburbanLayer);
         });
       }
@@ -592,9 +808,10 @@ const App = (() => {
             const [lng2, lat2] = feature.geometry.coordinates;
             state.busTermini.push({ name, lat: lat2, lng: lng2 });
           }
+          // Tooltip shows MTC logo + name
           layer.bindTooltip(
-            `<div class="zone-tooltip"><div class="zone-tooltip-name">🚌 ${name}</div></div>`,
-            { direction: 'top', className: 'zone-tooltip-wrap', permanent: false }
+            `<span class="tt-mtc-badge">MTC</span> ${name}`,
+            { direction: 'top', permanent: false }
           );
         },
       });
@@ -701,6 +918,48 @@ const App = (() => {
 
   async function onMapClick(e) {
     const { lat, lng } = e.latlng;
+
+    // Pick-from-map mode: drop red marker, reverse-geocode, restore survey
+    if (state._pickingWorkLoc) {
+      state._pickingWorkLoc = false;
+
+      // Remove any previous pick preview marker
+      if (state._pickPreviewMarker) { state._pickPreviewMarker.remove(); state._pickPreviewMarker = null; }
+
+      // Drop a red "Work" marker immediately so user sees the pick
+      const redIcon = L.divIcon({
+        className: '',
+        html: `<div class="work-pick-marker"><div class="work-pick-dot"></div><div class="work-pick-label">Work</div></div>`,
+        iconSize: [48, 48],
+        iconAnchor: [24, 44],
+      });
+      state._pickPreviewMarker = L.marker([lat, lng], { icon: redIcon, zIndexOffset: 1100 }).addTo(state.map);
+
+      // Restore survey overlay immediately
+      document.getElementById('onboarding').classList.remove('ob-picking');
+
+      // Reverse-geocode asynchronously
+      let name = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
+        const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const d = await r.json();
+        const a = d.address || {};
+        name = a.amenity || a.building || a.road || a.suburb || a.neighbourhood
+             || d.display_name.split(',')[0] || name;
+      } catch (_) {}
+
+      state.customWorkLoc = { lat, lng, name };
+      // Update survey input
+      const input = document.getElementById('ob-work-search');
+      if (input) { input.value = name; input.classList.add('ob-location-selected'); }
+      const key = OB_STEPS[obStep]?.key;
+      if (key) obAnswers[key] = 'custom';
+      document.getElementById('ob-next').disabled = false;
+      // Update marker tooltip with resolved name
+      state._pickPreviewMarker.bindTooltip(name, { permanent: false, direction: 'top' });
+      return;
+    }
 
     // Pin mode: drop pin at click location
     if (state.pinMode) {
@@ -907,6 +1166,14 @@ const App = (() => {
     nearby.busHubs.forEach(h => {
       rows.push(mkRow('🏢', h.name, h.km, h.minutes));
     });
+
+    // Major train terminals (always shown, sorted by distance)
+    if (nearby.trainHubs?.length) {
+      rows.push(`<div class="transit-section-label">🚆 Train Terminals</div>`);
+      nearby.trainHubs.forEach(t => {
+        rows.push(mkRow('🚆', t.name, t.km, t.minutes));
+      });
+    }
 
     return rows.length
       ? rows.join('')
@@ -1206,8 +1473,8 @@ const App = (() => {
           weight: 1.5,
         })
         .bindTooltip(
-          `<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name} <span style="opacity:0.6;font-size:10px">(Ph.2)</span></div></div>`,
-          { direction: 'top', className: 'zone-tooltip-wrap' }
+          `<span class="tt-metro-badge">Ⓜ</span> ${name} <span style="opacity:0.65;font-size:10px">(Ph.2)</span>`,
+          { direction: 'top' }
         )
         .addTo(group);
       });
@@ -1245,11 +1512,16 @@ const App = (() => {
           const name = rawName;
           state.metroStations.push({ name, lat: el.lat, lng: el.lon, phase: 1 });
           L.circleMarker([el.lat, el.lon], {
-            radius: 6, color: '#fff', fillColor: '#8b5cf6', fillOpacity: 1, weight: 2,
+            radius: 6,
+            color: '#fff',
+            fillColor: '#8b5cf6',
+            fillOpacity: 1,
+            weight: 2,
           })
-          .bindTooltip(`<div class="zone-tooltip"><div class="zone-tooltip-name">🚇 ${name}</div></div>`, {
-            direction: 'top', className: 'zone-tooltip-wrap',
-          })
+          .bindTooltip(
+            `<span class="tt-metro-badge">Ⓜ</span> ${name}`,
+            { direction: 'top' }
+          )
           .addTo(group);
         }
       });
@@ -1668,17 +1940,21 @@ const App = (() => {
         document.getElementById('sidebar').classList.remove('open');
       });
 
-      // Reco panel — close collapses to peek
+      // Reco panel — close collapses to peek; restore map controls
       document.getElementById('reco-close').addEventListener('click', e => {
         e.stopPropagation();
         document.getElementById('reco-panel').classList.remove('open');
+        document.body.classList.remove('reco-open');
       });
       // Handle + header (but not close/retake buttons) expand when peeking
       ['.reco-handle', '.reco-header'].forEach(sel => {
         document.querySelector(sel)?.addEventListener('click', e => {
           if (e.target.closest('#reco-close') || e.target.closest('#retake-quiz-btn')) return;
           const panel = document.getElementById('reco-panel');
-          if (!panel.classList.contains('open')) panel.classList.add('open');
+          if (!panel.classList.contains('open')) {
+            panel.classList.add('open');
+            document.body.classList.add('reco-open');
+          }
         });
       });
       document.getElementById('retake-quiz-btn')?.addEventListener('click', e => {

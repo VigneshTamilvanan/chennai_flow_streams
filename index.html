@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="description" content="ChennaiSafe — Smart property decision tool. Check flood risk, property rates, commute times and facilities before buying in Chennai." />
-  <title>ChennaiSafe — Smart Property Insights</title>
+  <meta name="description" content="Find your ideal property location in Chennai. Compare rates, commute times, flood risk and facilities before buying." />
+  <title>Find Your Ideal Location in Chennai</title>
 
   <link rel="stylesheet" href="css/leaflet.css" />
   <link rel="stylesheet" href="css/L.Control.Locate.min.css" />
@@ -19,10 +19,15 @@
        ONBOARDING WIZARD
   ════════════════════════════════════════ -->
   <div id="onboarding" class="onboarding-overlay">
+    <!-- Floating hint shown during pick-from-map mode -->
+    <div class="ob-pick-floating-hint" id="ob-pick-floating-hint">
+      📌 Click anywhere on the map to set your work location
+      <button id="ob-pick-floating-cancel" style="background:rgba(255,255,255,0.15);border:none;color:#fff;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;font-weight:600;">Cancel</button>
+    </div>
     <div class="ob-card">
       <div class="ob-top">
-        <div class="ob-logo">🌊 ChennaiSafe</div>
-        <div class="ob-tagline">Find your ideal property in Chennai.<br>Compare rates, commute times &amp; flood risk.</div>
+        <div class="ob-logo">📍 Find Your Ideal Location</div>
+        <div class="ob-tagline">Compare property rates, commute times &amp; flood risk<br>across Chennai neighbourhoods.</div>
         <div class="ob-progress">
           <div class="ob-dot active"></div>
           <div class="ob-dot"></div>
@@ -48,8 +53,8 @@
   ════════════════════════════════════════ -->
   <header id="app-header">
     <div class="header-brand">
-      <span class="brand-icon">🌊</span>
-      <span class="brand-name">ChennaiSafe</span>
+      <span class="brand-icon">📍</span>
+      <span class="brand-name">Find Your Ideal Location</span>
     </div>
 
     <div class="search-container">
@@ -212,6 +217,12 @@
         <span class="layer-item-sub" id="localities-sub">Loading from OpenStreetMap…</span>
       </span>
     </label>
+    <div class="layer-section-divider">Basemap</div>
+    <div class="basemap-switcher">
+      <button class="bm-btn active" data-bm="hybrid">🛰️ Hybrid</button>
+      <button class="bm-btn" data-bm="normal">🗺️ Normal</button>
+      <button class="bm-btn" data-bm="osm">🌍 OSM</button>
+    </div>
     <div class="layer-section-divider">Flood &amp; Terrain</div>
     <label class="layer-item">
       <input type="checkbox" id="toggle-streams" />

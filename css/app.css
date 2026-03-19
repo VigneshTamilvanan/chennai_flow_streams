@@ -66,7 +66,7 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .brand-icon { font-size: 22px; }
 .brand-name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--primary);
   white-space: nowrap;
@@ -456,6 +456,7 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
   border-radius: 20px;
   width: 100%;
   max-width: 480px;
+  transition: transform 0.3s ease;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   overflow: hidden;
 }
@@ -575,6 +576,84 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 .ob-work-result-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .ob-work-result-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
+/* Pick-from-map row */
+.ob-location-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.ob-pick-map-btn {
+  flex-shrink: 0;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.ob-pick-map-btn:hover {
+  background: rgba(26,86,219,0.06);
+  border-color: var(--primary);
+}
+.ob-pick-map-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #1e40af;
+  font-weight: 500;
+  margin-top: 6px;
+}
+.ob-pick-cancel {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.ob-pick-cancel:hover { background: rgba(0,0,0,0.05); }
+
+/* Pick-from-map mode: hide overlay completely, show floating hint bar */
+#onboarding.ob-picking {
+  background: transparent;
+  backdrop-filter: none;
+  pointer-events: none;
+  align-items: flex-end;
+  padding-bottom: 24px;
+}
+#onboarding.ob-picking .ob-card {
+  display: none;
+}
+#onboarding.ob-picking .ob-pick-floating-hint {
+  display: flex !important;
+  pointer-events: auto;
+}
+.ob-pick-floating-hint {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  background: #1e3a5f;
+  color: #fff;
+  border-radius: 14px;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  pointer-events: auto;
+}
+
 .ob-footer {
   padding: 0 28px 24px;
   display: flex;
@@ -692,8 +771,23 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
   z-index: 600;
   transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* Shift FABs up when reco panel is in peek or open state */
+/* Shift FABs up when reco panel is in peek state */
 #reco-panel.ready ~ .map-fabs { bottom: 80px; }
+
+/* Hide FABs + Leaflet controls when reco panel is fully open */
+#reco-panel.open ~ .map-fabs {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.map-fabs { transition: opacity 0.2s, bottom 0.3s cubic-bezier(0.4,0,0.2,1); }
+body.reco-open .leaflet-top,
+body.reco-open .leaflet-bottom {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.leaflet-top, .leaflet-bottom { transition: opacity 0.2s; }
 
 /* "Layers" label under the layers FAB */
 .fab-layers-btn::after {
@@ -1114,4 +1208,193 @@ body.pin-mode #map { cursor: crosshair !important; }
   font-size: 10.5px;
   color: var(--text-muted);
   margin-left: 2px;
+}
+
+/* ===== SORT BAR (Top Picks) — sits between header and card list ===== */
+.sort-bar {
+  display: flex;
+  gap: 3px;
+  padding: 4px 14px 5px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  align-items: center;
+  flex-shrink: 0;
+}
+.sort-bar-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-right: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sort-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.sort-btn:hover {
+  color: var(--primary);
+  background: rgba(26,86,219,0.07);
+}
+.sort-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* Commute badge in reco cards */
+.reco-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 2px;
+  flex-wrap: wrap;
+}
+.reco-commute {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 2px 7px;
+}
+
+/* ===== WORK PICK PREVIEW MARKER (red, shown immediately on click) ===== */
+.work-pick-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.work-pick-dot {
+  width: 18px;
+  height: 18px;
+  background: #dc2626;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(220,38,38,0.5);
+}
+.work-pick-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fff;
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin-top: 3px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+  white-space: nowrap;
+}
+
+/* ===== WORK LOCATION MARKER ===== */
+.work-pin {
+  background: #ea580c;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 14px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  border: 2px solid #fff;
+  pointer-events: none;
+}
+
+/* ===== METRO MARKER ICON ===== */
+.metro-icon {
+  width: 22px;
+  height: 22px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.3);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.metro-icon-ph2 {
+  background: #a78bfa;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  border-width: 1.5px;
+}
+
+/* ===== TOOLTIP INLINE BADGES (metro Ⓜ and MTC label) ===== */
+.tt-metro-badge {
+  display: inline-block;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+.tt-mtc-badge {
+  display: inline-block;
+  background: #0d9488;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  border-radius: 3px;
+  padding: 1px 3px;
+  vertical-align: middle;
+  letter-spacing: 0.04em;
+}
+
+/* ===== TRANSIT SECTION LABEL ===== */
+.transit-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* ===== BASEMAP SWITCHER ===== */
+.basemap-switcher {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px 10px;
+}
+.bm-btn {
+  flex: 1;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+.bm-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: rgba(26,86,219,0.05);
+}
+.bm-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
