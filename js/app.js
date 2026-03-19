@@ -2107,31 +2107,58 @@ const App = (() => {
 
   async function reverseGeocode(lat, lng) {
     try {
-      // zoom=14 targets suburb/neighbourhood-level OSM features.
-      // data.name is the actual OSM place name at that point.
-      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en&addressdetails=1&zoom=14`;
-      const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-      const data = await resp.json();
-      const a = data.address || {};
+      // Overpass API: query place nodes within 1500m for locality name, road WAYS within
+      // 100m for road name, and postcode nodes within 400m.
+      // Key fixes vs Nominatim:
+      //  - Includes place=locality (most common type in Chennai/India, missing from OSM neighbourhood)
+      //  - Roads in OSM are way elements, not node elements — use way["highway"]["name"]
+      //  - Avoids Nominatim polygon-containment returning "Chennai" / "CMWSSB Division 106"
+      const query = `[out:json][timeout:10];
+(
+  node["place"~"^(neighbourhood|suburb|quarter|hamlet|village|locality)$"]["name"](around:1500,${lat},${lng});
+  way["place"~"^(neighbourhood|suburb|quarter|hamlet|village|locality)$"]["name"](around:1500,${lat},${lng});
+  way["highway"]["name"](around:100,${lat},${lng});
+  node["addr:postcode"](around:400,${lat},${lng});
+);out tags center;`;
 
-      // Filter out utility/administrative tags (CMWSSB Division, Ward #, etc.)
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query),
+      });
+      const data = await resp.json();
+      const elements = data.elements || [];
+
+      // Filter out utility/administrative division names
       const isAdminTag = v => v && /\b(division|ward|zone|block|sector|taluk)\b[\s\-]*\d/i.test(v);
 
-      // 1st choice: OSM feature name at zoom=14 (e.g. "Vyasarpadi")
-      // 2nd choice: address sub-fields, most-specific first
-      // 3rd choice: first part of display_name — only if not an admin tag
-      const addrFallback = [a.neighbourhood, a.hamlet, a.village, a.suburb,
-                            a.quarter, a.city_district, a.town]
-                           .find(v => v && !isAdminTag(v));
-      const displayFirst = data.display_name.split(',')[0];
-      const short = (!isAdminTag(data.name) && data.name)
-                  || addrFallback
-                  || (!isAdminTag(displayFirst) && displayFirst)
-                  || data.display_name.split(',').find(p => !isAdminTag(p.trim()))?.trim()
+      // Distance from pin to element centre
+      const distTo = e => {
+        const eLat = e.lat ?? e.center?.lat;
+        const eLng = e.lon ?? e.center?.lon;
+        if (eLat == null) return 9999;
+        const dLat = (lat - eLat) * 111320;
+        const dLng = (lng - eLng) * Math.cos(lat * Math.PI / 180) * 111320;
+        return Math.sqrt(dLat * dLat + dLng * dLng);
+      };
+
+      const places = elements
+        .filter(e => e.tags?.place && e.tags?.name && !isAdminTag(e.tags.name))
+        .sort((a, b) => distTo(a) - distTo(b));
+
+      const roads = elements
+        .filter(e => e.tags?.highway && e.tags?.name && !isAdminTag(e.tags.name))
+        .sort((a, b) => distTo(a) - distTo(b));
+
+      const locality = places[0]?.tags.name;
+      const road     = roads[0]?.tags.name;
+      const pincode  = elements.find(e => e.tags?.['addr:postcode'])?.tags['addr:postcode'] || '';
+
+      // "Vyasarpadi · Perambur High Road" / locality only / road only / fallback
+      const short = locality && road ? `${locality} · ${road}`
+                  : locality || road
                   || 'Custom Location';
-      const district = a.city_district || a.county || a.state_district || '';
-      const pincode = a.postcode || '';
-      return { short, district, pincode };
+
+      return { short, district: '', pincode };
     } catch (_) {
       return { short: 'Custom Location', district: '', pincode: '' };
     }
