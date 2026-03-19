@@ -276,22 +276,30 @@
       </span>
     </label>
 
-    <!-- Zones & Places -->
-    <div class="layer-section-divider">Zones &amp; Places</div>
+    <!-- Neighbourhoods & Places -->
+    <div class="layer-section-divider">Neighbourhoods &amp; Places</div>
     <label class="layer-item">
       <input type="checkbox" id="toggle-zones" checked />
       <span class="layer-dot" style="background:linear-gradient(135deg,#16a34a,#dc2626)"></span>
       <span class="layer-item-text">
-        <span class="layer-item-name">Zone Markers</span>
-        <span class="layer-item-sub">Property zones — composite score</span>
+        <span class="layer-item-name">Neighbourhoods</span>
+        <span class="layer-item-sub">All Chennai neighbourhoods · composite score</span>
       </span>
     </label>
     <label class="layer-item">
-      <input type="checkbox" id="toggle-localities" />
-      <span class="layer-dot" style="background:#9ca3af;border-radius:50%"></span>
+      <input type="checkbox" id="toggle-parks" />
+      <span class="layer-dot" style="background:#16a34a;border-radius:50%"></span>
       <span class="layer-item-text">
-        <span class="layer-item-name">OSM Localities</span>
-        <span class="layer-item-sub" id="localities-sub">Loading from OpenStreetMap…</span>
+        <span class="layer-item-name">Parks</span>
+        <span class="layer-item-sub">Public parks &amp; green spaces</span>
+      </span>
+    </label>
+    <label class="layer-item">
+      <input type="checkbox" id="toggle-lakes" />
+      <span class="layer-dot" style="background:#0ea5e9;border-radius:50%"></span>
+      <span class="layer-item-text">
+        <span class="layer-item-name">Lakes &amp; Water Bodies</span>
+        <span class="layer-item-sub">Eri, lakes, reservoirs</span>
       </span>
     </label>
     <label class="layer-item">
@@ -405,6 +413,7 @@
   <script src="data/metro_ph2_air_wimco_stn.js"></script>
   <script src="data/metro_ph2_stm_central_stn.js"></script>
   <script src="data/chennai-data.js"></script>
+  <script src="data/neighbourhoods-auto.js"></script>
   <script src="js/flood-score.js"></script>
   <script src="js/app.js"></script>
 
