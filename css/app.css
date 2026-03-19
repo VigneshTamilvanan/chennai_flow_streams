@@ -863,6 +863,66 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .zone-circle.top-pick { animation: pulse-ring 2s infinite; }
 
+/* ===== OSM LOCALITY MARKERS ===== */
+.locality-marker {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.92);
+  border: 2px solid #9ca3af;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 800;
+  color: #374151;
+  font-family: 'Inter', sans-serif;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.18);
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+  letter-spacing: -0.3px;
+}
+.locality-marker:hover {
+  transform: scale(1.25);
+  border-color: var(--primary);
+  color: var(--primary);
+  background: #fff;
+}
+
+/* ===== WIKIPEDIA EXCERPT ===== */
+.wiki-excerpt {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 8px 0 4px;
+}
+.wiki-icon {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: #1f2937;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Georgia', serif;
+  margin-top: 1px;
+}
+.wiki-text {
+  font-size: 11.5px;
+  color: #4b5563;
+  line-height: 1.55;
+}
+.wiki-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: none;
+}
+.wiki-link:hover { text-decoration: underline; }
+
 /* ===== DROP-A-PIN FEATURE ===== */
 
 /* Crosshair cursor when pin mode is active */

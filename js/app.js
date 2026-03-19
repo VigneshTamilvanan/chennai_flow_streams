@@ -23,6 +23,8 @@ const App = (() => {
     pinMarker: null,
     pinBuffer: null,
     _pinData: null,
+    // OSM locality layer
+    localityLayer: null,
   };
 
   // ── Onboarding ─────────────────────────────────────────────
@@ -275,6 +277,9 @@ const App = (() => {
     // Zone markers
     addZoneMarkers();
 
+    // OSM locality discovery (async, non-blocking)
+    loadOSMLocalities();
+
     // Click on map → reverse geocode and show nearest zone
     state.map.on('click', onMapClick);
 
@@ -292,6 +297,10 @@ const App = (() => {
       Object.values(state.zoneMarkers).forEach(m => {
         e.target.checked ? m.addTo(state.map) : state.map.removeLayer(m);
       });
+    });
+    document.getElementById('toggle-localities').addEventListener('change', e => {
+      if (!state.localityLayer) return;
+      e.target.checked ? state.localityLayer.addTo(state.map) : state.map.removeLayer(state.localityLayer);
     });
 
     // FABs
@@ -487,6 +496,9 @@ const App = (() => {
 
     // Sidebar header
     document.querySelector('.sidebar-location').textContent = zone.name;
+
+    // Wikipedia enrichment (non-blocking)
+    injectWikiInfo('.zone-name', zone.name);
 
     // Fetch facilities asynchronously
     loadFacilities(zone);
@@ -708,6 +720,132 @@ const App = (() => {
     );
   }
 
+  // ── OSM Locality Discovery ─────────────────────────────────
+  const OSM_LOCALITY_CACHE_KEY = 'csafe_osm_localities_v2';
+  const OSM_LOCALITY_TTL = 24 * 60 * 60 * 1000; // 24h
+
+  async function loadOSMLocalities() {
+    // Try cache first
+    try {
+      const cached = sessionStorage.getItem(OSM_LOCALITY_CACHE_KEY);
+      if (cached) {
+        const { ts, data } = JSON.parse(cached);
+        if (Date.now() - ts < OSM_LOCALITY_TTL) {
+          renderLocalityMarkers(data);
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // Overpass query — all named places in Chennai district bounds
+    const bbox = '12.87,80.09,13.25,80.34';
+    const query =
+      `[out:json][timeout:30];(` +
+      `node["place"~"suburb|neighbourhood|quarter|town|village"]["name"](${bbox});` +
+      `way["place"~"suburb|neighbourhood|quarter|town|village"]["name"](${bbox});` +
+      `relation["place"~"suburb|neighbourhood|quarter|town|village"]["name"](${bbox});` +
+      `);out center tags;`;
+
+    try {
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query),
+      });
+      const json = await resp.json();
+
+      const localities = json.elements
+        .filter(el => el.tags?.name)
+        .map(el => ({
+          name: el.tags['name:en'] || el.tags.name,
+          nameTa: el.tags['name:ta'] || '',
+          lat: el.lat ?? el.center?.lat,
+          lng: el.lon ?? el.center?.lon,
+          place: el.tags.place,
+          population: el.tags.population ? Number(el.tags.population) : null,
+          osmId: el.id,
+        }))
+        .filter(l => l.lat && l.lng)
+        // Skip localities already covered by curated zones (within ~1.5km)
+        .filter(l => !CHENNAI_ZONES.some(z => Math.hypot(z.lat - l.lat, z.lng - l.lng) < 0.015));
+
+      sessionStorage.setItem(OSM_LOCALITY_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: localities }));
+      renderLocalityMarkers(localities);
+    } catch (e) {
+      // Non-critical — app works fine without this
+    }
+  }
+
+  function renderLocalityMarkers(localities) {
+    if (state.localityLayer) state.map.removeLayer(state.localityLayer);
+    state.localityLayer = L.layerGroup().addTo(state.map);
+
+    localities.forEach(loc => {
+      const initials = loc.name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+      const icon = L.divIcon({
+        html: `<div class="locality-marker" title="${loc.name}">${initials}</div>`,
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      const popText = loc.population ? `Pop: ~${loc.population.toLocaleString('en-IN')}` : loc.place;
+      const marker = L.marker([loc.lat, loc.lng], { icon });
+      marker.bindTooltip(
+        `<div class="zone-tooltip"><div class="zone-tooltip-name">${loc.name}</div><div class="zone-tooltip-price" style="color:#6b7280">${popText}</div></div>`,
+        { direction: 'top', offset: [0, -14], className: 'zone-tooltip-wrap' }
+      );
+      marker.on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        openPinProfile(loc.lat, loc.lng);
+      });
+      marker.addTo(state.localityLayer);
+    });
+
+    // Update layer toggle label with count
+    const subEl = document.getElementById('localities-sub');
+    if (subEl) subEl.textContent = `${localities.length} areas from OpenStreetMap`;
+  }
+
+  // ── Wikipedia Enrichment ────────────────────────────────────
+  const _wikiCache = {};
+
+  async function fetchWikiSummary(name) {
+    if (_wikiCache[name] !== undefined) return _wikiCache[name];
+    const tryFetch = async (title) => {
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (d.type === 'disambiguation' || !d.extract) return null;
+      return { extract: d.extract.slice(0, 220), url: d.content_urls?.desktop?.page };
+    };
+    try {
+      const result = (await tryFetch(name + ', Chennai')) || (await tryFetch(name));
+      _wikiCache[name] = result;
+      return result;
+    } catch (_) {
+      _wikiCache[name] = null;
+      return null;
+    }
+  }
+
+  function injectWikiInfo(containerSelector, name) {
+    fetchWikiSummary(name).then(wiki => {
+      if (!wiki) return;
+      const el = document.querySelector(containerSelector);
+      if (!el) return;
+      const div = document.createElement('div');
+      div.className = 'wiki-excerpt';
+      div.innerHTML = `
+        <div class="wiki-icon">W</div>
+        <div class="wiki-text">
+          ${wiki.extract}…
+          <a href="${wiki.url}" target="_blank" rel="noopener" class="wiki-link">Wikipedia ↗</a>
+        </div>`;
+      el.insertAdjacentElement('afterend', div);
+    });
+  }
+
   // ── Drop-a-Pin Feature ─────────────────────────────────────
   function togglePinMode() {
     state.pinMode = !state.pinMode;
@@ -839,6 +977,11 @@ const App = (() => {
 
     // Store for share
     state._pinData = { lat, lng, address, streamData };
+
+    // Wikipedia enrichment for the reverse-geocoded name
+    if (address.short && address.short !== 'Custom Location') {
+      injectWikiInfo('.zone-name', address.short);
+    }
   }
 
   async function loadPinFacilities(lat, lng) {
