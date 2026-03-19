@@ -486,13 +486,14 @@ const CHENNAI_ZONES = [
 ];
 
 // Employment zones reference (for commute display)
+// lat/lng = centroid of the employment hub (used for haversine travel time)
 const WORK_ZONES = {
-  omr:      { label: "OMR / IT Corridor",       key: "omr" },
-  guindy:   { label: "Guindy / Industrial",      key: "guindy" },
-  ambattur: { label: "Ambattur Industrial",      key: "ambattur" },
-  airport:  { label: "Airport / Pallavaram",     key: "airport" },
-  tnagar:   { label: "T Nagar / Commercial",     key: "tnagar" },
-  central:  { label: "Central / Egmore (Govt)",  key: "central" }
+  omr:      { label: "OMR / IT Corridor",       key: "omr",      lat: 12.9010, lng: 80.2279 },
+  guindy:   { label: "Guindy / Industrial",      key: "guindy",   lat: 13.0067, lng: 80.2206 },
+  ambattur: { label: "Ambattur Industrial",      key: "ambattur", lat: 13.1143, lng: 80.1548 },
+  airport:  { label: "Airport / Pallavaram",     key: "airport",  lat: 12.9941, lng: 80.1709 },
+  tnagar:   { label: "T Nagar / Commercial",     key: "tnagar",   lat: 13.0418, lng: 80.2341 },
+  central:  { label: "Central / Egmore (Govt)",  key: "central",  lat: 13.0827, lng: 80.2707 }
 };
 
 // Zone lookup by id

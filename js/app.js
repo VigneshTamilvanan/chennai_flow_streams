@@ -29,6 +29,30 @@ const App = (() => {
     metroLayer: null,
   };
 
+  // ── Haversine travel-time helper ───────────────────────────
+  // Returns estimated one-way commute in minutes.
+  // Uses haversine straight-line distance × 1.35 road-factor
+  // then divides by Chennai urban avg speed (20 km/h peak).
+  function commuteMinutes(lat1, lng1, lat2, lng2) {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng / 2) ** 2;
+    const distKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const roadKm = distKm * 1.35;   // straight-line → road distance factor
+    const speedKmh = 20;            // Chennai peak-hour average
+    return Math.round(roadKm / speedKmh * 60);
+  }
+
+  // Pre-compute commute minutes from each zone to each work hub
+  function getCommute(zone, workKey) {
+    const hub = typeof WORK_ZONES !== 'undefined' && WORK_ZONES[workKey];
+    if (!hub) return zone.commute?.[workKey] ?? null;
+    return commuteMinutes(zone.lat, zone.lng, hub.lat, hub.lng);
+  }
+
   // ── Onboarding ─────────────────────────────────────────────
   const OB_STEPS = [
     {
@@ -167,13 +191,13 @@ const App = (() => {
       if (persona.budget === '7k-12k' && avgPrice <= 12500) { score += 20; }
       if (persona.budget === 'above-12k') score += 15;
 
-      // Work proximity
+      // Work proximity (haversine-computed)
       const workKey = persona.work === 'wfh' || persona.work === 'other' ? null : persona.work;
-      if (workKey && zone.commute[workKey] !== undefined) {
-        const t = zone.commute[workKey];
-        if (t <= 15) { score += 30; reasons.push(`~${t} min to work`); }
-        else if (t <= 25) { score += 20; reasons.push(`~${t} min to work`); }
-        else if (t <= 35) score += 10;
+      const tWork = workKey ? getCommute(zone, workKey) : null;
+      if (tWork !== null) {
+        if (tWork <= 15) { score += 30; reasons.push(`~${tWork} min to work`); }
+        else if (tWork <= 25) { score += 20; reasons.push(`~${tWork} min to work`); }
+        else if (tWork <= 35) score += 10;
       } else if (!workKey) {
         score += 15; // WFH doesn't penalize
       }
@@ -198,12 +222,11 @@ const App = (() => {
       if (persona.priority === 'greenery' && zone.scores.greenery >= 70) { score += 25; reasons.push('Green & open'); }
 
       // Commute tolerance
-      if (workKey && zone.commute[workKey] !== undefined) {
-        const t = zone.commute[workKey];
-        if (persona.commute_tolerance === 'under-20' && t > 20) score -= 15;
-        if (persona.commute_tolerance === '20-40' && t > 40) score -= 10;
-        if (persona.commute_tolerance === 'under-20' && t <= 20) { score += 15; reasons.push(`Only ~${t} min commute`); }
-        if (persona.commute_tolerance === '20-40' && t <= 40) score += 8;
+      if (tWork !== null) {
+        if (persona.commute_tolerance === 'under-20' && tWork > 20) score -= 15;
+        if (persona.commute_tolerance === '20-40' && tWork > 40) score -= 10;
+        if (persona.commute_tolerance === 'under-20' && tWork <= 20) { score += 15; reasons.push(`Only ~${tWork} min commute`); }
+        if (persona.commute_tolerance === '20-40' && tWork <= 40) score += 8;
       }
 
       return { ...zone, matchScore: score, reasons };
@@ -259,6 +282,7 @@ const App = (() => {
     const panel = document.getElementById('reco-panel');
     const list = document.getElementById('reco-list');
     list.innerHTML = '';
+    panel.classList.add('ready'); // enables peek mode
 
     state.recommendations.forEach((zone, i) => {
       const card = document.createElement('div');
@@ -298,8 +322,10 @@ const App = (() => {
     // Restore all zone markers
     showAllZones();
 
-    // Close reco panel
-    document.getElementById('reco-panel').classList.remove('open');
+    // Hide reco panel fully until quiz re-completes
+    const panel = document.getElementById('reco-panel');
+    panel.classList.remove('open');
+    panel.classList.remove('ready');
 
     // Re-show onboarding
     document.getElementById('onboarding').classList.remove('hidden');
@@ -597,7 +623,7 @@ const App = (() => {
       { key: 'central', icon: '🏛️', label: 'Central / Egmore' },
     ];
     return destinations.map(dest => {
-      const t = zone.commute[dest.key];
+      const t = getCommute(zone, dest.key);
       const isHighlighted = dest.key === highlightKey;
       return `
         <div class="commute-row">
@@ -1323,9 +1349,18 @@ const App = (() => {
         document.getElementById('sidebar').classList.remove('open');
       });
 
-      // Reco panel close
-      document.getElementById('reco-close').addEventListener('click', () => {
+      // Reco panel — close collapses to peek
+      document.getElementById('reco-close').addEventListener('click', e => {
+        e.stopPropagation();
         document.getElementById('reco-panel').classList.remove('open');
+      });
+      // Handle + header (but not the close button) expand when peeking
+      ['.reco-handle', '.reco-header'].forEach(sel => {
+        document.querySelector(sel)?.addEventListener('click', e => {
+          if (e.target.closest('#reco-close')) return;
+          const panel = document.getElementById('reco-panel');
+          if (!panel.classList.contains('open')) panel.classList.add('open');
+        });
       });
     },
     shareZone,

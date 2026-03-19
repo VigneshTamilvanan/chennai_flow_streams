@@ -555,13 +555,15 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
   z-index: 700;
+  /* hidden until quiz is done */
   transform: translateY(100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   max-height: 65vh;
   display: flex;
   flex-direction: column;
 }
-#reco-panel.open { transform: translateY(0); }
+#reco-panel.ready { transform: translateY(calc(100% - 56px)); } /* peek */
+#reco-panel.open  { transform: translateY(0); }                  /* expanded */
 .reco-handle {
   width: 40px; height: 4px;
   background: var(--border);
