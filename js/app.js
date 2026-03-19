@@ -235,26 +235,38 @@ const App = (() => {
       grid.appendChild(btn);
     });
 
-    // Custom location search box (work step only)
+    // Custom location search box + pick from map (work step only)
     if (step.hasLocationSearch) {
       const searchWrap = document.createElement('div');
       searchWrap.className = 'ob-location-search';
       const savedName = state.customWorkLoc?.name || '';
       const savedSelected = obAnswers[step.key] === 'custom';
       searchWrap.innerHTML = `
-        <div class="ob-location-label">— or type your exact workplace —</div>
-        <div class="ob-location-input-wrap">
-          <input id="ob-work-search" type="text" placeholder="e.g. DLF IT Park, Perungudi…"
-            value="${savedName}"
-            class="${savedSelected ? 'ob-location-selected' : ''}"
-            autocomplete="off" spellcheck="false"/>
+        <div class="ob-location-label">— or pinpoint your exact workplace —</div>
+        <div class="ob-location-row">
+          <div class="ob-location-input-wrap" style="flex:1">
+            <input id="ob-work-search" type="text" placeholder="e.g. DLF IT Park, Perungudi…"
+              value="${savedName}"
+              class="${savedSelected ? 'ob-location-selected' : ''}"
+              autocomplete="off" spellcheck="false"/>
+          </div>
+          <button id="ob-pick-map-btn" class="ob-pick-map-btn" title="Pick location on map">
+            📌 Pick from map
+          </button>
         </div>
         <div id="ob-work-dropdown" class="ob-work-dropdown"></div>
+        <div id="ob-pick-map-hint" class="ob-pick-map-hint hidden">
+          Click anywhere on the map to set your work location
+          <button id="ob-pick-cancel" class="ob-pick-cancel">Cancel</button>
+        </div>
       `;
       grid.appendChild(searchWrap);
 
       const input = searchWrap.querySelector('#ob-work-search');
       const dropEl = searchWrap.querySelector('#ob-work-dropdown');
+      const pickBtn = searchWrap.querySelector('#ob-pick-map-btn');
+      const pickHint = searchWrap.querySelector('#ob-pick-map-hint');
+      const pickCancel = searchWrap.querySelector('#ob-pick-cancel');
       let searchTimer = null;
 
       input.addEventListener('input', () => {
@@ -264,6 +276,22 @@ const App = (() => {
         dropEl.innerHTML = '';
         if (q.length < 2) return;
         searchTimer = setTimeout(() => obWorkNominatimSearch(q, input, dropEl), 400);
+      });
+
+      // "Pick from map" — minimise the onboarding card and let user click map
+      pickBtn.addEventListener('click', () => {
+        state._pickingWorkLoc = true;
+        pickBtn.classList.add('hidden');
+        pickHint.classList.remove('hidden');
+        // Shrink the onboarding overlay so the map is accessible
+        document.getElementById('onboarding').classList.add('ob-minimised');
+      });
+
+      pickCancel.addEventListener('click', () => {
+        state._pickingWorkLoc = false;
+        pickHint.classList.add('hidden');
+        pickBtn.classList.remove('hidden');
+        document.getElementById('onboarding').classList.remove('ob-minimised');
       });
     }
 
@@ -515,6 +543,10 @@ const App = (() => {
     // Sort bar
     const sortBar = document.createElement('div');
     sortBar.className = 'sort-bar';
+    const lbl = document.createElement('span');
+    lbl.className = 'sort-bar-label';
+    lbl.textContent = 'Sort:';
+    sortBar.appendChild(lbl);
     const sortBtns = [
       { key: 'score',   label: '⭐ Score' },
       { key: 'commute', label: '🕐 Commute' },
@@ -852,6 +884,36 @@ const App = (() => {
 
   async function onMapClick(e) {
     const { lat, lng } = e.latlng;
+
+    // Pick-from-map mode: set work location from click
+    if (state._pickingWorkLoc) {
+      state._pickingWorkLoc = false;
+      // Reverse-geocode the clicked point to get a readable name
+      let name = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en`;
+        const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+        const d = await r.json();
+        const a = d.address || {};
+        name = a.amenity || a.building || a.road || a.suburb || a.neighbourhood
+             || d.display_name.split(',')[0] || name;
+      } catch (_) {}
+      state.customWorkLoc = { lat, lng, name };
+      // Update survey input and mark as selected
+      const input = document.getElementById('ob-work-search');
+      if (input) { input.value = name; input.classList.add('ob-location-selected'); }
+      const key = OB_STEPS[obStep]?.key;
+      if (key) obAnswers[key] = 'custom';
+      // Restore survey overlay
+      document.getElementById('onboarding').classList.remove('ob-minimised');
+      const pickHint = document.getElementById('ob-pick-map-hint');
+      const pickBtn  = document.getElementById('ob-pick-map-btn');
+      if (pickHint) pickHint.classList.add('hidden');
+      if (pickBtn)  pickBtn.classList.remove('hidden');
+      document.getElementById('ob-next').disabled = false;
+      showToast(`Work location set: ${name}`);
+      return;
+    }
 
     // Pin mode: drop pin at click location
     if (state.pinMode) {

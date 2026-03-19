@@ -66,7 +66,7 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .brand-icon { font-size: 22px; }
 .brand-name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--primary);
   white-space: nowrap;
@@ -456,6 +456,7 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
   border-radius: 20px;
   width: 100%;
   max-width: 480px;
+  transition: transform 0.3s ease;
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   overflow: hidden;
 }
@@ -574,6 +575,67 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 .ob-work-result:hover { background: #f9fafb; }
 .ob-work-result-name { font-size: 13px; font-weight: 600; color: var(--text); }
 .ob-work-result-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+/* Pick-from-map row */
+.ob-location-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.ob-pick-map-btn {
+  flex-shrink: 0;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.ob-pick-map-btn:hover {
+  background: rgba(26,86,219,0.06);
+  border-color: var(--primary);
+}
+.ob-pick-map-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #1e40af;
+  font-weight: 500;
+  margin-top: 6px;
+}
+.ob-pick-cancel {
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.ob-pick-cancel:hover { background: rgba(0,0,0,0.05); }
+
+/* Minimised onboarding (map picking mode) */
+#onboarding.ob-minimised .ob-card {
+  transform: translateY(calc(100% - 80px));
+  transition: transform 0.3s ease;
+}
+#onboarding.ob-minimised {
+  pointer-events: none;
+}
+#onboarding.ob-minimised .ob-pick-map-hint {
+  pointer-events: auto;
+}
 
 .ob-footer {
   padding: 0 28px 24px;
@@ -1119,34 +1181,39 @@ body.pin-mode #map { cursor: crosshair !important; }
 /* ===== SORT BAR (Top Picks) ===== */
 .sort-bar {
   display: flex;
-  gap: 6px;
-  padding: 8px 12px 4px;
+  gap: 3px;
+  padding: 5px 10px 4px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
+  align-items: center;
+}
+.sort-bar-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-right: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .sort-btn {
-  flex: 1;
-  background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: 20px;
-  padding: 5px 8px;
-  font-size: 11px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 3px 7px;
+  font-size: 10px;
   font-weight: 500;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   white-space: nowrap;
-  text-align: center;
 }
 .sort-btn:hover {
-  border-color: var(--primary);
   color: var(--primary);
-  background: rgba(26,86,219,0.05);
+  background: rgba(26,86,219,0.07);
 }
 .sort-btn.active {
   background: var(--primary);
-  border-color: var(--primary);
   color: #fff;
+  border-color: var(--primary);
 }
 
 /* Commute badge in reco cards */
