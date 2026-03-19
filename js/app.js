@@ -18,6 +18,11 @@ const App = (() => {
     facilitiesCache: {},       // zone_id → facilities data
     recommendations: [],
     layerPanelOpen: false,
+    // Drop-a-pin
+    pinMode: false,
+    pinMarker: null,
+    pinBuffer: null,
+    _pinData: null,
   };
 
   // ── Onboarding ─────────────────────────────────────────────
@@ -291,6 +296,7 @@ const App = (() => {
 
     // FABs
     document.getElementById('fab-locate').addEventListener('click', locateUser);
+    document.getElementById('fab-pin').addEventListener('click', togglePinMode);
     document.getElementById('fab-layers').addEventListener('click', toggleLayerPanel);
     document.getElementById('layer-panel-close').addEventListener('click', toggleLayerPanel);
 
@@ -333,7 +339,14 @@ const App = (() => {
 
   async function onMapClick(e) {
     const { lat, lng } = e.latlng;
-    // Find nearest zone
+
+    // Pin mode: drop pin at click location
+    if (state.pinMode) {
+      dropPin(lat, lng);
+      return;
+    }
+
+    // Normal mode: snap to nearest zone
     const nearest = findNearestZone(lat, lng);
     if (nearest) openZoneProfile(nearest);
   }
@@ -695,6 +708,194 @@ const App = (() => {
     );
   }
 
+  // ── Drop-a-Pin Feature ─────────────────────────────────────
+  function togglePinMode() {
+    state.pinMode = !state.pinMode;
+    const btn = document.getElementById('fab-pin');
+    btn.classList.toggle('active', state.pinMode);
+    document.body.classList.toggle('pin-mode', state.pinMode);
+    if (state.pinMode) {
+      showToast('Click anywhere on the map to drop a pin');
+    } else {
+      clearPin();
+    }
+  }
+
+  function dropPin(lat, lng) {
+    // Remove previous pin + buffer
+    if (state.pinMarker) state.map.removeLayer(state.pinMarker);
+    if (state.pinBuffer) state.map.removeLayer(state.pinBuffer);
+
+    // Custom pin icon
+    const pinIcon = L.divIcon({
+      html: `<div class="drop-pin-marker"><div class="pin-head"></div><div class="pin-tail"></div></div>`,
+      className: '',
+      iconSize: [28, 40],
+      iconAnchor: [14, 40],
+    });
+    state.pinMarker = L.marker([lat, lng], { icon: pinIcon, zIndexOffset: 1000 }).addTo(state.map);
+
+    // 3km dashed buffer circle
+    state.pinBuffer = L.circle([lat, lng], {
+      radius: 3000,
+      color: '#1a56db',
+      fillColor: '#1a56db',
+      fillOpacity: 0.05,
+      weight: 2,
+      dashArray: '7 5',
+    }).addTo(state.map);
+
+    // Zoom to fit buffer
+    state.map.fitBounds(state.pinBuffer.getBounds(), { padding: [50, 50] });
+
+    // Analyse and show profile
+    openPinProfile(lat, lng);
+  }
+
+  async function openPinProfile(lat, lng) {
+    document.getElementById('sidebar').classList.add('open');
+    document.querySelector('.sidebar-location').textContent = 'Analysing location…';
+    document.getElementById('sidebar-content').innerHTML = `
+      <div style="padding:32px 20px;text-align:center;color:#6b7280">
+        <div style="font-size:32px;margin-bottom:10px">📍</div>
+        <div style="font-size:14px;font-weight:600;color:#374151">Analysing this location…</div>
+        <div style="font-size:12px;margin-top:4px">Fetching address &amp; flood data</div>
+      </div>`;
+
+    // Parallel: reverse geocode + flood score (local, instant)
+    const [address, streamData] = await Promise.all([
+      reverseGeocode(lat, lng),
+      Promise.resolve(FloodScorer.analyze(lat, lng)),
+    ]);
+
+    document.querySelector('.sidebar-location').textContent = address.short || 'Custom Location';
+    renderPinProfile(lat, lng, address, streamData);
+
+    // Facilities loaded async after render
+    loadPinFacilities(lat, lng);
+  }
+
+  async function reverseGeocode(lat, lng) {
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=en&addressdetails=1`;
+      const resp = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      const data = await resp.json();
+      const a = data.address || {};
+      const short = a.suburb || a.neighbourhood || a.quarter || a.city_district
+                  || a.town || a.village || data.display_name.split(',')[0];
+      const district = a.city_district || a.county || a.state_district || '';
+      const pincode = a.postcode || '';
+      return { short, district, pincode };
+    } catch (_) {
+      return { short: 'Custom Location', district: '', pincode: '' };
+    }
+  }
+
+  function renderPinProfile(lat, lng, address, streamData) {
+    const tierClass = streamData ? `risk-${streamData.tier}` : '';
+    const tierLabel = streamData ? floodTierLabel(streamData.tier) : '—';
+    const score = streamData ? streamData.score : '—';
+
+    document.getElementById('sidebar-content').innerHTML = `
+      <div class="pin-mode-hint">📍 Custom pin — 3km buffer active</div>
+      <div class="zone-name">${address.short || 'Custom Location'}</div>
+      ${address.district
+        ? `<div class="zone-district"><span>🗺</span>${address.district}${address.pincode ? ' · PIN ' + address.pincode : ''}</div>`
+        : ''}
+      <div class="pin-coords-chip">
+        🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}
+        <span class="pin-radius-note">· 3km buffer</span>
+      </div>
+
+      <!-- Flood Score -->
+      <div class="flood-block ${tierClass}">
+        <div class="flood-label">🌊 Flood Safety Score</div>
+        ${streamData ? `
+          <div class="flood-tier-badge ${tierClass}">
+            ${tierLabel}
+            <span style="font-size:13px;font-weight:400;opacity:0.7">&nbsp;${score}/100</span>
+          </div>
+          <div class="flood-score-bar">
+            <div class="flood-score-fill" style="width:${score}%"></div>
+          </div>
+          <div class="flood-note">Computed from ALOS PALSAR DEM stream network</div>
+          <div class="flood-events" style="color:inherit;opacity:0.65">📍 Nearest stream: ${streamData.distLabel} away</div>
+        ` : '<div class="flood-note">Stream data unavailable</div>'}
+      </div>
+
+      <!-- Facilities (loaded async) -->
+      <div class="profile-section" id="pin-fac-section">
+        <div class="section-label">Nearby Facilities <span style="font-weight:400;color:#9ca3af">(within 3km via OSM)</span></div>
+        <div class="facility-loading" id="pin-fac-loading">Loading from OpenStreetMap…</div>
+        <div class="facilities-grid" id="pin-fac-grid" style="display:none"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="profile-actions">
+        <button class="btn-primary" onclick="App.sharePinLocation()">📲 Share</button>
+        <button class="btn-outline" onclick="App.clearDroppedPin()">🗑️ Clear Pin</button>
+      </div>
+    `;
+
+    // Store for share
+    state._pinData = { lat, lng, address, streamData };
+  }
+
+  async function loadPinFacilities(lat, lng) {
+    const r = 3000;
+    const query = `[out:json][timeout:25];(node["amenity"~"hospital|clinic|school|college|bank|pharmacy"](around:${r},${lat},${lng});node["shop"="supermarket"](around:${r},${lat},${lng});node["leisure"="park"](around:${r},${lat},${lng});way["leisure"="park"](around:${r},${lat},${lng});node["railway"="station"](around:${r},${lat},${lng}););out tags;`;
+    const loadingEl = document.getElementById('pin-fac-loading');
+    const gridEl = document.getElementById('pin-fac-grid');
+
+    try {
+      const resp = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: 'data=' + encodeURIComponent(query),
+      });
+      const json = await resp.json();
+      const counts = {};
+      json.elements.forEach(el => {
+        const key = el.tags?.amenity || el.tags?.shop || el.tags?.leisure || el.tags?.railway;
+        if (key) counts[key] = (counts[key] || 0) + 1;
+      });
+      const data = {
+        hospitals: (counts.hospital || 0) + (counts.clinic || 0),
+        schools: (counts.school || 0) + (counts.college || 0),
+        supermarkets: counts.supermarket || 0,
+        banks: counts.bank || 0,
+        pharmacies: counts.pharmacy || 0,
+        parks: counts.park || 0,
+      };
+      renderFacilities(data, loadingEl, gridEl);
+    } catch (_) {
+      if (loadingEl) loadingEl.textContent = 'Facilities unavailable (offline)';
+    }
+  }
+
+  function clearPin() {
+    if (state.pinMarker) { state.map.removeLayer(state.pinMarker); state.pinMarker = null; }
+    if (state.pinBuffer) { state.map.removeLayer(state.pinBuffer); state.pinBuffer = null; }
+    state._pinData = null;
+    document.getElementById('sidebar').classList.remove('open');
+  }
+
+  function sharePinLocation() {
+    const d = state._pinData;
+    if (!d) return;
+    const { lat, lng, address, streamData } = d;
+    const tier = streamData ? floodTierLabel(streamData.tier) : 'Unknown';
+    const score = streamData ? streamData.score + '/100' : 'N/A';
+    const dist = streamData ? `Nearest stream: ${streamData.distLabel}\n` : '';
+    const text =
+      `🌊 *ChennaiSafe — Custom Location Analysis*\n\n` +
+      `📍 ${address.short || 'Custom Location'}${address.district ? ', ' + address.district : ''}\n` +
+      `🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}\n\n` +
+      `Flood Risk: ${tier} (${score})\n${dist}` +
+      `Analysis radius: 3km\n\n` +
+      `Check flood risk before buying property 👇\nchennaifloods.in`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  }
+
   // ── Layer Panel ────────────────────────────────────────────
   function toggleLayerPanel() {
     state.layerPanelOpen = !state.layerPanelOpen;
@@ -778,5 +979,7 @@ const App = (() => {
     shareZone,
     compareZone,
     openZone: openZoneProfile,
+    clearDroppedPin: clearPin,
+    sharePinLocation,
   };
 })();
