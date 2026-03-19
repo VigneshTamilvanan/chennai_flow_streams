@@ -897,6 +897,22 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 }
 .show-all-chip button:hover { background: rgba(255,255,255,0.25); }
 
+.retake-quiz-btn {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 8px 16px 16px;
+  padding: 10px;
+  background: none;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.retake-quiz-btn:hover { border-color: var(--primary); color: var(--primary); }
+
 /* ===== OSM LOCALITY MARKERS ===== */
 .locality-marker {
   width: 26px; height: 26px;

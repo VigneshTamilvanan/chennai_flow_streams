@@ -278,7 +278,32 @@ const App = (() => {
       list.appendChild(card);
     });
 
+    // Retake quiz button at the bottom of the panel
+    const retakeBtn = document.createElement('button');
+    retakeBtn.className = 'retake-quiz-btn';
+    retakeBtn.textContent = '↺ Retake Quiz';
+    retakeBtn.addEventListener('click', retakeQuiz);
+    list.appendChild(retakeBtn);
+
     panel.classList.add('open');
+  }
+
+  function retakeQuiz() {
+    // Reset quiz state
+    obStep = 0;
+    Object.keys(obAnswers).forEach(k => delete obAnswers[k]);
+    state.userPersona = null;
+    state.recommendations = [];
+
+    // Restore all zone markers
+    showAllZones();
+
+    // Close reco panel
+    document.getElementById('reco-panel').classList.remove('open');
+
+    // Re-show onboarding
+    document.getElementById('onboarding').classList.remove('hidden');
+    renderObStep();
   }
 
   // ── Map Setup ──────────────────────────────────────────────
