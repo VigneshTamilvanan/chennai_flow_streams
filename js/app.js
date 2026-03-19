@@ -117,6 +117,7 @@ const App = (() => {
   function initOnboarding() {
     renderObStep();
     document.getElementById('ob-skip').addEventListener('click', skipOnboarding);
+    document.getElementById('ob-back').addEventListener('click', prevObStep);
     document.getElementById('ob-next').addEventListener('click', nextObStep);
   }
 
@@ -149,9 +150,17 @@ const App = (() => {
       dot.classList.toggle('active', i <= obStep);
     });
 
+    // Footer buttons: Skip on step 0, Back on step 1+
+    document.getElementById('ob-skip').classList.toggle('hidden', obStep > 0);
+    document.getElementById('ob-back').classList.toggle('hidden', obStep === 0);
+
     const nextBtn = document.getElementById('ob-next');
     nextBtn.disabled = !obAnswers[step.key];
     nextBtn.textContent = obStep === OB_STEPS.length - 1 ? 'Show My Matches →' : 'Next →';
+  }
+
+  function prevObStep() {
+    if (obStep > 0) { obStep--; renderObStep(); }
   }
 
   function nextObStep() {
