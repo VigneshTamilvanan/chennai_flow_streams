@@ -166,7 +166,17 @@ const App = (() => {
 
   function skipOnboarding() {
     document.getElementById('onboarding').classList.add('hidden');
-    showToast('Explore the map — click any zone to see insights');
+    // If user skipped a retake, restore previous picks
+    if (state._prevRecommendations?.length) {
+      state.recommendations = state._prevRecommendations;
+      state.userPersona = state._prevPersona;
+      state._prevRecommendations = null;
+      state._prevPersona = null;
+      highlightRecommendations();
+      showRecoPanel();
+    } else {
+      showToast('Explore the map — click any zone to see insights');
+    }
   }
 
   function finishOnboarding() {
@@ -308,6 +318,10 @@ const App = (() => {
   function retakeQuiz() {
     // Reset quiz state
     obStep = 0;
+    // Save previous picks so skip can restore them
+    state._prevRecommendations = state.recommendations.slice();
+    state._prevPersona = state.userPersona;
+
     Object.keys(obAnswers).forEach(k => delete obAnswers[k]);
     state.userPersona = null;
     state.recommendations = [];
