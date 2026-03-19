@@ -1060,83 +1060,44 @@ const App = (() => {
     // Click on map → reverse geocode and show nearest zone
     state.map.on('click', onMapClick);
 
-    // Layer toggles
-    document.getElementById('toggle-streams').addEventListener('change', e => {
-      e.target.checked ? state.map.addLayer(state.streamLayer) : state.map.removeLayer(state.streamLayer);
-    });
-    document.getElementById('toggle-dem').addEventListener('change', e => {
-      e.target.checked ? state.map.addLayer(state.demLayer) : state.map.removeLayer(state.demLayer);
-    });
-    document.getElementById('toggle-substreams').addEventListener('change', e => {
-      e.target.checked ? state.map.addLayer(state.substreamsLayer) : state.map.removeLayer(state.substreamsLayer);
-    });
-    document.getElementById('toggle-zones').addEventListener('change', e => {
-      Object.values(state.zoneMarkers).forEach(m => {
-        e.target.checked ? m.addTo(state.map) : state.map.removeLayer(m);
-      });
-    });
-    document.getElementById('toggle-parks').addEventListener('change', e => {
-      if (!state.parkLayer) return;
-      e.target.checked ? state.parkLayer.addTo(state.map) : state.map.removeLayer(state.parkLayer);
-    });
-    document.getElementById('toggle-lakes').addEventListener('change', e => {
-      if (!state.lakeLayer) return;
-      e.target.checked ? state.lakeLayer.addTo(state.map) : state.map.removeLayer(state.lakeLayer);
-    });
-    document.getElementById('toggle-employment').addEventListener('change', e => {
-      if (!state.employmentLayer) return;
-      e.target.checked ? state.employmentLayer.addTo(state.map) : state.map.removeLayer(state.employmentLayer);
-    });
+    // Layer toggles — all wrapped with ?. to survive any HTML/JS version mismatch
+    const _on = (id, ev, fn) => document.getElementById(id)?.addEventListener(ev, fn);
+
+    _on('toggle-streams',    'change', e => { e.target.checked ? state.map.addLayer(state.streamLayer) : state.map.removeLayer(state.streamLayer); });
+    _on('toggle-dem',        'change', e => { e.target.checked ? state.map.addLayer(state.demLayer) : state.map.removeLayer(state.demLayer); });
+    _on('toggle-substreams', 'change', e => { e.target.checked ? state.map.addLayer(state.substreamsLayer) : state.map.removeLayer(state.substreamsLayer); });
+    _on('toggle-zones',      'change', e => { Object.values(state.zoneMarkers).forEach(m => { e.target.checked ? m.addTo(state.map) : state.map.removeLayer(m); }); });
+    _on('toggle-parks',      'change', e => { if (!state.parkLayer) return; e.target.checked ? state.parkLayer.addTo(state.map) : state.map.removeLayer(state.parkLayer); });
+    _on('toggle-lakes',      'change', e => { if (!state.lakeLayer) return; e.target.checked ? state.lakeLayer.addTo(state.map) : state.map.removeLayer(state.lakeLayer); });
+    _on('toggle-localities', 'change', e => { if (!state.localityLayer) return; e.target.checked ? state.localityLayer.addTo(state.map) : state.map.removeLayer(state.localityLayer); });
+    _on('toggle-employment', 'change', e => { if (!state.employmentLayer) return; e.target.checked ? state.employmentLayer.addTo(state.map) : state.map.removeLayer(state.employmentLayer); });
     // Metro per-line toggles (ids match state.metroLayers keys)
     ['line6', 'line7', 'line3', 'line4', 'line5'].forEach(lid => {
-      const el = document.getElementById(`toggle-metro-${lid}`);
-      if (!el) return;
-      el.addEventListener('change', ev => {
+      _on(`toggle-metro-${lid}`, 'change', ev => {
         const layer = state.metroLayers[lid];
         if (!layer) return;
         ev.target.checked ? layer.addTo(state.map) : state.map.removeLayer(layer);
       });
     });
-    document.getElementById('toggle-orr').addEventListener('change', e => {
-      if (!state.orrLayer) return;
-      e.target.checked ? state.orrLayer.addTo(state.map) : state.map.removeLayer(state.orrLayer);
-    });
-    document.getElementById('toggle-irr').addEventListener('change', e => {
-      if (!state.irrLayer) return;
-      e.target.checked ? state.irrLayer.addTo(state.map) : state.map.removeLayer(state.irrLayer);
-    });
-    document.getElementById('toggle-nh').addEventListener('change', e => {
-      if (!state.nhLayer) return;
-      e.target.checked ? state.nhLayer.addTo(state.map) : state.map.removeLayer(state.nhLayer);
-    });
-    document.getElementById('toggle-suburban').addEventListener('change', e => {
-      if (!state.suburbanLayer) return;
-      e.target.checked ? state.suburbanLayer.addTo(state.map) : state.map.removeLayer(state.suburbanLayer);
-    });
-    document.getElementById('toggle-bus-terminus').addEventListener('change', e => {
-      if (!state.busTerminusLayer) return;
-      e.target.checked ? state.busTerminusLayer.addTo(state.map) : state.map.removeLayer(state.busTerminusLayer);
-    });
+    _on('toggle-orr',          'change', e => { if (!state.orrLayer) return; e.target.checked ? state.orrLayer.addTo(state.map) : state.map.removeLayer(state.orrLayer); });
+    _on('toggle-irr',          'change', e => { if (!state.irrLayer) return; e.target.checked ? state.irrLayer.addTo(state.map) : state.map.removeLayer(state.irrLayer); });
+    _on('toggle-nh',           'change', e => { if (!state.nhLayer) return; e.target.checked ? state.nhLayer.addTo(state.map) : state.map.removeLayer(state.nhLayer); });
+    _on('toggle-suburban',     'change', e => { if (!state.suburbanLayer) return; e.target.checked ? state.suburbanLayer.addTo(state.map) : state.map.removeLayer(state.suburbanLayer); });
+    _on('toggle-bus-terminus', 'change', e => { if (!state.busTerminusLayer) return; e.target.checked ? state.busTerminusLayer.addTo(state.map) : state.map.removeLayer(state.busTerminusLayer); });
 
     // FABs
-    document.getElementById('fab-locate').addEventListener('click', locateUser);
-    document.getElementById('fab-pin').addEventListener('click', togglePinMode);
-    document.getElementById('fab-layers').addEventListener('click', toggleLayerPanel);
-    document.getElementById('layer-panel-close').addEventListener('click', toggleLayerPanel);
+    _on('fab-locate',       'click', locateUser);
+    _on('fab-pin',          'click', togglePinMode);
+    _on('fab-layers',       'click', toggleLayerPanel);
+    _on('layer-panel-close','click', toggleLayerPanel);
 
     // Info panel
-    document.getElementById('info-btn').addEventListener('click', () => {
-      document.getElementById('info-panel').classList.remove('hidden');
-    });
-    document.getElementById('info-panel-close').addEventListener('click', () => {
-      document.getElementById('info-panel').classList.add('hidden');
-    });
-    document.getElementById('info-panel').addEventListener('click', e => {
-      if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-    });
+    _on('info-btn',        'click', () => { document.getElementById('info-panel')?.classList.remove('hidden'); });
+    _on('info-panel-close','click', () => { document.getElementById('info-panel')?.classList.add('hidden'); });
+    _on('info-panel',      'click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
 
     // My Picks button
-    document.getElementById('my-picks-btn').addEventListener('click', () => {
+    _on('my-picks-btn', 'click', () => {
       if (state.recommendations.length > 0) showRecoPanel();
       else {
         document.getElementById('filter-bar')?.classList.add('open');
