@@ -302,13 +302,6 @@ const App = (() => {
       list.appendChild(card);
     });
 
-    // Retake quiz button at the bottom of the panel
-    const retakeBtn = document.createElement('button');
-    retakeBtn.className = 'retake-quiz-btn';
-    retakeBtn.textContent = '↺ Retake Quiz';
-    retakeBtn.addEventListener('click', retakeQuiz);
-    list.appendChild(retakeBtn);
-
     panel.classList.add('open');
   }
 
@@ -1354,13 +1347,17 @@ const App = (() => {
         e.stopPropagation();
         document.getElementById('reco-panel').classList.remove('open');
       });
-      // Handle + header (but not the close button) expand when peeking
+      // Handle + header (but not close/retake buttons) expand when peeking
       ['.reco-handle', '.reco-header'].forEach(sel => {
         document.querySelector(sel)?.addEventListener('click', e => {
-          if (e.target.closest('#reco-close')) return;
+          if (e.target.closest('#reco-close') || e.target.closest('#retake-quiz-btn')) return;
           const panel = document.getElementById('reco-panel');
           if (!panel.classList.contains('open')) panel.classList.add('open');
         });
+      });
+      document.getElementById('retake-quiz-btn')?.addEventListener('click', e => {
+        e.stopPropagation();
+        retakeQuiz();
       });
     },
     shareZone,
