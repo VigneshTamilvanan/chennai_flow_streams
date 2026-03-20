@@ -141,6 +141,70 @@ html, body { width: 100%; height: 100%; font-family: 'Inter', sans-serif; overfl
 .info-list li { font-size: 12.5px; color: var(--text); line-height: 1.5; }
 .info-panel-footer { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); }
 
+/* ── Collapsible score explainer ── */
+.info-score-details {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.info-score-summary {
+  list-style: none;
+  padding: 10px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--primary);
+  cursor: pointer;
+  background: rgba(26,86,219,0.04);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+.info-score-summary::-webkit-details-marker { display: none; }
+.info-score-summary::after {
+  content: '▸';
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+.info-score-details[open] .info-score-summary::after { transform: rotate(90deg); }
+.info-score-body { padding: 12px 14px 14px; }
+.info-score-intro {
+  font-size: 12.5px;
+  color: var(--text);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+.info-score-list {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.info-score-list li { font-size: 12.5px; color: var(--text); line-height: 1.5; }
+.isl-label { font-weight: 700; margin-right: 4px; }
+.info-score-tiers {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.ist {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 20px;
+}
+.ist-green  { background: #dcfce7; color: #16a34a; border: 1px solid #bbf7d0; }
+.ist-yellow { background: #fef9c3; color: #b45309; border: 1px solid #fde68a; }
+.ist-orange { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+.ist-red    { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
 .search-container {
   flex: 1;
   position: relative;
