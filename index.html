@@ -109,6 +109,30 @@
           </ul>
         </div>
       </div>
+
+      <details class="info-score-details">
+        <summary class="info-score-summary">🧮 How scores are computed</summary>
+        <div class="info-score-body">
+          <p class="info-score-intro">Every zone carries an <strong>Overall score (0–100)</strong> — a simple average of six sub-scores:</p>
+          <ul class="info-score-list">
+            <li><span class="isl-label">🔗 Connectivity</span> Transit links, road access &amp; corridor proximity</li>
+            <li><span class="isl-label">🏥 Amenities</span> Hospitals, malls &amp; daily facilities (OpenStreetMap live)</li>
+            <li><span class="isl-label">🏫 Schools</span> Nearby school count &amp; quality indicators</li>
+            <li><span class="isl-label">🌿 Greenery</span> Parks, lakes &amp; tree-cover density</li>
+            <li><span class="isl-label">🛡️ Safety</span> Area type &amp; historical incident data</li>
+            <li><span class="isl-label">💰 Value</span> Price-to-quality ratio vs. city average</li>
+          </ul>
+          <p class="info-score-intro" style="margin-top:10px">⚠️ <strong>Risk score</strong> — stream proximity from ALOS PALSAR DEM + historical events; <em>lower = safer</em>.</p>
+          <p class="info-score-intro">⭐ <strong>Top Picks match</strong> — personalised score weighted by your budget, commute, family type &amp; priority.</p>
+          <div class="info-score-tiers">
+            <span class="ist ist-green">72+ Excellent</span>
+            <span class="ist ist-yellow">55–71 Good</span>
+            <span class="ist ist-orange">38–54 Average</span>
+            <span class="ist ist-red">&lt;38 Below Avg</span>
+          </div>
+        </div>
+      </details>
+
       <div class="info-panel-footer">IllamAI · 57 curated zones + 146 neighbourhoods · 2025</div>
     </div>
   </div>
