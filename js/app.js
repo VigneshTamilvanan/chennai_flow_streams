@@ -23,8 +23,8 @@ const App = (() => {
     pinMarker: null,
     pinBuffer: null,
     pinMask: null,        // unused (kept for safety)
-    _bufferClipUpdate: null, // fn ref for removing the clip listener
     _pinData: null,
+    _layerSnapshot: null, // toggle states saved on pin-drop; restored on clear
     // OSM locality layer
     localityLayer: null,
     // Metro layer (split by line)
@@ -2025,66 +2025,74 @@ const App = (() => {
     }
   }
 
-  // Clip all SVG overlay layers (metro, streams, roads …) to a circle at
-  // (lat, lng) / radiusM metres. Clip is applied to each inner <g> element
-  // (not the <svg> itself) so it stays in sync with Leaflet's pan transforms.
-  function applyBufferClip(lat, lng, radiusM) {
-    removeBufferClip();
-
-    const svg = state.map.getPanes().overlayPane.querySelector('svg');
-    if (!svg) return;
-
-    // Ensure <defs>
-    let defs = svg.querySelector('defs');
-    if (!defs) {
-      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-      svg.insertBefore(defs, svg.firstChild);
-    }
-
-    const cp = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
-    cp.id = 'bufferClip';
-    cp.setAttribute('clipPathUnits', 'userSpaceOnUse');
-    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circ.id = 'bufferClipCircle';
-    cp.appendChild(circ);
-    defs.appendChild(cp);
-
-    function update() {
-      // Update circle in Leaflet layer-point coords (same space as path d=)
-      const cPt = state.map.latLngToLayerPoint([lat, lng]);
-      const ePt = state.map.latLngToLayerPoint([lat + radiusM / 111320, lng]);
-      circ.setAttribute('cx', cPt.x);
-      circ.setAttribute('cy', cPt.y);
-      circ.setAttribute('r', Math.abs(cPt.y - ePt.y));
-      // Apply to every child <g> — handles layers toggled after pin was dropped
-      svg.querySelectorAll(':scope > g').forEach(g => {
-        g.setAttribute('clip-path', 'url(#bufferClip)');
-      });
-    }
-
-    update();
-    state.map.on('move zoom viewreset zoomend moveend', update);
-    state._bufferClipUpdate = update;
+  // ── Layer snapshot helpers ────────────────────────────────────────────────
+  // When a pin is dropped we force-enable every overlay so the user sees full
+  // context. The previous toggle states are snapshotted and restored on clear.
+  function _layerPairs() {
+    return [
+      ['toggle-streams',      () => state.streamLayer],
+      ['toggle-dem',          () => state.demLayer],
+      ['toggle-substreams',   () => state.substreamsLayer],
+      ['toggle-parks',        () => state.parkLayer],
+      ['toggle-lakes',        () => state.lakeLayer],
+      ['toggle-localities',   () => state.localityLayer],
+      ['toggle-employment',   () => state.employmentLayer],
+      ['toggle-orr',          () => state.orrLayer],
+      ['toggle-irr',          () => state.irrLayer],
+      ['toggle-nh',           () => state.nhLayer],
+      ['toggle-suburban',     () => state.suburbanLayer],
+      ['toggle-bus-terminus', () => state.busTerminusLayer],
+      ...['line6','line7','line3','line4','line5'].map(lid => [
+        `toggle-metro-${lid}`, () => state.metroLayers[lid],
+      ]),
+    ];
   }
 
-  function removeBufferClip() {
-    if (state._bufferClipUpdate) {
-      state.map.off('move zoom viewreset zoomend moveend', state._bufferClipUpdate);
-      state._bufferClipUpdate = null;
+  function snapshotAndEnableLayers() {
+    const snapshot = {};
+    _layerPairs().forEach(([id, getLayer]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      snapshot[id] = el.checked;
+      if (!el.checked) { el.checked = true; const l = getLayer(); if (l) l.addTo(state.map); }
+    });
+    // Zones — collection of markers
+    const zonesEl = document.getElementById('toggle-zones');
+    if (zonesEl) {
+      snapshot['toggle-zones'] = zonesEl.checked;
+      if (!zonesEl.checked) {
+        zonesEl.checked = true;
+        Object.values(state.zoneMarkers).forEach(m => m.addTo(state.map));
+      }
     }
-    const svg = state.map.getPanes().overlayPane?.querySelector('svg');
-    if (svg) {
-      svg.removeAttribute('clip-path');
-      svg.querySelectorAll(':scope > g').forEach(g => g.removeAttribute('clip-path'));
-      document.getElementById('bufferClip')?.remove();
+    state._layerSnapshot = snapshot;
+  }
+
+  function restoreLayerSnapshot() {
+    const snap = state._layerSnapshot;
+    if (!snap) return;
+    state._layerSnapshot = null;
+    _layerPairs().forEach(([id, getLayer]) => {
+      if (!(id in snap)) return;
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.checked = snap[id];
+      if (!snap[id]) { const l = getLayer(); if (l) state.map.removeLayer(l); }
+    });
+    if ('toggle-zones' in snap) {
+      const el = document.getElementById('toggle-zones');
+      if (el) {
+        el.checked = snap['toggle-zones'];
+        if (!snap['toggle-zones']) Object.values(state.zoneMarkers).forEach(m => state.map.removeLayer(m));
+      }
     }
   }
+  // ─────────────────────────────────────────────────────────────────────────
 
   function dropPin(lat, lng) {
-    // Remove previous pin + buffer + clip
+    // Remove previous pin + buffer
     if (state.pinMarker) state.map.removeLayer(state.pinMarker);
     if (state.pinBuffer) state.map.removeLayer(state.pinBuffer);
-    removeBufferClip();
 
     // Custom pin icon
     const pinIcon = L.divIcon({
@@ -2105,8 +2113,8 @@ const App = (() => {
       dashArray: '7 5',
     }).addTo(state.map);
 
-    // Clip all SVG overlay layers to the 2km buffer circle
-    applyBufferClip(lat, lng, 2000);
+    // Force-enable all overlay layers; snapshot state for restore on clear
+    snapshotAndEnableLayers();
 
     // Zoom to fit buffer
     state.map.fitBounds(state.pinBuffer.getBounds(), { padding: [50, 50] });
@@ -2335,7 +2343,7 @@ const App = (() => {
   function clearPin() {
     if (state.pinMarker) { state.map.removeLayer(state.pinMarker); state.pinMarker = null; }
     if (state.pinBuffer) { state.map.removeLayer(state.pinBuffer); state.pinBuffer = null; }
-    removeBufferClip();
+    restoreLayerSnapshot();
     state._pinData = null;
     document.getElementById('sidebar').classList.remove('open');
   }
