@@ -824,7 +824,7 @@ const CHENNAI_ZONES = [
     bestFor: ["budget-buyers", "port-workers"],
     tags: ["affordable", "industrial", "north-chennai", "port-proximity"],
     scores: { connectivity: 55, amenities: 48, schools: 52, greenery: 40, safety: 50, value: 75 }
-  }
+  },
   // ── Wikipedia — Areas of Chennai (deep-scraped) ──────────────
   {
     id: "ashok_nagar",
