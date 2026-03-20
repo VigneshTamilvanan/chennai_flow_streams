@@ -803,9 +803,11 @@ const App = (() => {
     const pickCancel = document.getElementById('pick-work-cancel');
     if (pickCancel) pickCancel.addEventListener('click', cancelPickMode);
 
-    // Tab toggle
+    // Tab toggle — mark as seen on first click to stop pulse animation
     document.getElementById('fb-tab')?.addEventListener('click', () => {
-      document.getElementById('filter-bar')?.classList.toggle('open');
+      const bar = document.getElementById('filter-bar');
+      bar?.classList.toggle('open');
+      bar?.classList.add('seen');
     });
 
     // Apply button
