@@ -2026,28 +2026,49 @@ const App = (() => {
     }
   }
 
-  // ── SVG clip — restricts overlay visibility to the buffer circle ─────────
+  // ── Buffer clip — restricts ALL layer visibility to the buffer circle ─────
+  // SVG clipPath handles GeoJSON <g> paths (metro, streams, roads).
+  // CSS clip-path on each pane handles DOM markers + imageOverlays (<img>).
+  const _CLIPPED_PANES = ['overlayPane', 'shadowPane', 'markerPane', 'tooltipPane'];
+
   function applyBufferClip(lat, lng, radiusM) {
     removeBufferClip();
+
+    // ── 1. SVG clip for GeoJSON <g> layers ──
     const svg = state.map.getPanes().overlayPane.querySelector('svg');
-    if (!svg) return;
-    let defs = svg.querySelector('defs');
-    if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); svg.insertBefore(defs, svg.firstChild); }
-    const cp = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
-    cp.id = 'bufferClip';
-    cp.setAttribute('clipPathUnits', 'userSpaceOnUse');
-    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circ.id = 'bufferClipCircle';
-    cp.appendChild(circ);
-    defs.appendChild(cp);
+    if (svg) {
+      let defs = svg.querySelector('defs');
+      if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); svg.insertBefore(defs, svg.firstChild); }
+      const cp = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+      cp.id = 'bufferClip';
+      cp.setAttribute('clipPathUnits', 'userSpaceOnUse');
+      const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circ.id = 'bufferClipCircle';
+      cp.appendChild(circ); defs.appendChild(cp);
+    }
+
+    // ── 2. Combined update: SVG circle + CSS clip-path on all panes ──
     function update() {
       const cPt = state.map.latLngToLayerPoint([lat, lng]);
       const ePt = state.map.latLngToLayerPoint([lat + radiusM / 111320, lng]);
-      circ.setAttribute('cx', cPt.x);
-      circ.setAttribute('cy', cPt.y);
-      circ.setAttribute('r',  Math.abs(cPt.y - ePt.y));
-      svg.querySelectorAll(':scope > g').forEach(g => g.setAttribute('clip-path', 'url(#bufferClip)'));
+      const r   = Math.abs(cPt.y - ePt.y);
+
+      // SVG clip
+      const svgCirc = document.getElementById('bufferClipCircle');
+      if (svgCirc) {
+        svgCirc.setAttribute('cx', cPt.x); svgCirc.setAttribute('cy', cPt.y); svgCirc.setAttribute('r', r);
+        const s = state.map.getPanes().overlayPane.querySelector('svg');
+        if (s) s.querySelectorAll(':scope > g').forEach(g => g.setAttribute('clip-path', 'url(#bufferClip)'));
+      }
+
+      // CSS clip-path on panes — clips DOM markers + <img> imageOverlays
+      const cssClip = `circle(${r}px at ${cPt.x}px ${cPt.y}px)`;
+      _CLIPPED_PANES.forEach(name => {
+        const pane = state.map.getPanes()[name];
+        if (pane) pane.style.clipPath = cssClip;
+      });
     }
+
     update();
     state.map.on('move zoom viewreset zoomend moveend', update);
     state._bufferClipUpdate = update;
@@ -2058,11 +2079,17 @@ const App = (() => {
       state.map.off('move zoom viewreset zoomend moveend', state._bufferClipUpdate);
       state._bufferClipUpdate = null;
     }
+    // Remove SVG clip
     const svg = state.map.getPanes().overlayPane?.querySelector('svg');
     if (svg) {
       svg.querySelectorAll(':scope > g').forEach(g => g.removeAttribute('clip-path'));
       document.getElementById('bufferClip')?.remove();
     }
+    // Remove CSS clip from panes
+    _CLIPPED_PANES.forEach(name => {
+      const pane = state.map.getPanes()[name];
+      if (pane) pane.style.clipPath = '';
+    });
   }
   // ─────────────────────────────────────────────────────────────────────────
 
