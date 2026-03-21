@@ -23,6 +23,7 @@ const App = (() => {
     pinMarker: null,
     pinBuffer: null,
     pinMask: null,        // unused (kept for safety)
+    _bufferClipUpdate: null,
     _pinData: null,
     _layerSnapshot: null, // toggle states saved on pin-drop; restored on clear
     // OSM locality layer
@@ -2025,6 +2026,46 @@ const App = (() => {
     }
   }
 
+  // ── SVG clip — restricts overlay visibility to the buffer circle ─────────
+  function applyBufferClip(lat, lng, radiusM) {
+    removeBufferClip();
+    const svg = state.map.getPanes().overlayPane.querySelector('svg');
+    if (!svg) return;
+    let defs = svg.querySelector('defs');
+    if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); svg.insertBefore(defs, svg.firstChild); }
+    const cp = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+    cp.id = 'bufferClip';
+    cp.setAttribute('clipPathUnits', 'userSpaceOnUse');
+    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circ.id = 'bufferClipCircle';
+    cp.appendChild(circ);
+    defs.appendChild(cp);
+    function update() {
+      const cPt = state.map.latLngToLayerPoint([lat, lng]);
+      const ePt = state.map.latLngToLayerPoint([lat + radiusM / 111320, lng]);
+      circ.setAttribute('cx', cPt.x);
+      circ.setAttribute('cy', cPt.y);
+      circ.setAttribute('r',  Math.abs(cPt.y - ePt.y));
+      svg.querySelectorAll(':scope > g').forEach(g => g.setAttribute('clip-path', 'url(#bufferClip)'));
+    }
+    update();
+    state.map.on('move zoom viewreset zoomend moveend', update);
+    state._bufferClipUpdate = update;
+  }
+
+  function removeBufferClip() {
+    if (state._bufferClipUpdate) {
+      state.map.off('move zoom viewreset zoomend moveend', state._bufferClipUpdate);
+      state._bufferClipUpdate = null;
+    }
+    const svg = state.map.getPanes().overlayPane?.querySelector('svg');
+    if (svg) {
+      svg.querySelectorAll(':scope > g').forEach(g => g.removeAttribute('clip-path'));
+      document.getElementById('bufferClip')?.remove();
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ── Layer snapshot helpers ────────────────────────────────────────────────
   // When a pin is dropped we force-enable every overlay so the user sees full
   // context. The previous toggle states are snapshotted and restored on clear.
@@ -2103,9 +2144,9 @@ const App = (() => {
     });
     state.pinMarker = L.marker([lat, lng], { icon: pinIcon, zIndexOffset: 1000 }).addTo(state.map);
 
-    // 2km dashed buffer circle
+    // 2.5km dashed buffer circle
     state.pinBuffer = L.circle([lat, lng], {
-      radius: 2000,
+      radius: 2500,
       color: '#1a56db',
       fillColor: '#1a56db',
       fillOpacity: 0.05,
@@ -2113,8 +2154,10 @@ const App = (() => {
       dashArray: '7 5',
     }).addTo(state.map);
 
-    // Force-enable all overlay layers; snapshot state for restore on clear
+    // 1. Force-enable all overlay layers (snapshot old state for restore)
     snapshotAndEnableLayers();
+    // 2. Clip all SVG overlays to the buffer so only the 2.5km area is visible
+    applyBufferClip(lat, lng, 2500);
 
     // Zoom to fit buffer
     state.map.fitBounds(state.pinBuffer.getBounds(), { padding: [50, 50] });
@@ -2220,14 +2263,14 @@ const App = (() => {
     const pinCompLabel = pinComposite >= 72 ? 'Excellent' : pinComposite >= 55 ? 'Good' : pinComposite >= 38 ? 'Average' : 'Below Average';
 
     document.getElementById('sidebar-content').innerHTML = `
-      <div class="pin-mode-hint">📍 Custom pin — 2km buffer active</div>
+      <div class="pin-mode-hint" id="pin-mode-hint">📍 Custom pin — 2.5km buffer active</div>
       <div class="zone-name">${address.short || 'Custom Location'}</div>
       ${address.district
         ? `<div class="zone-district"><span>🗺</span>${address.district}${address.pincode ? ' · PIN ' + address.pincode : ''}</div>`
         : ''}
       <div class="pin-coords-chip">
         🌐 ${lat.toFixed(5)}, ${lng.toFixed(5)}
-        <span class="pin-radius-note">· 2km buffer</span>
+        <span class="pin-radius-note" id="pin-radius-note">· 2.5km buffer</span>
       </div>
 
       <!-- Estimated Overall Score — first, matching zone profile -->
@@ -2268,7 +2311,7 @@ const App = (() => {
 
       <!-- Facilities (loaded async) -->
       <div class="profile-section" id="pin-fac-section">
-        <div class="section-label">Nearby Facilities <span style="font-weight:400;color:#9ca3af">(within 2km via OSM)</span></div>
+        <div class="section-label">Nearby Facilities <span style="font-weight:400;color:#9ca3af">(within 2.5km via OSM)</span></div>
         <div class="facility-loading" id="pin-fac-loading">Loading from OpenStreetMap…</div>
         <div class="facilities-grid" id="pin-fac-grid" style="display:none"></div>
       </div>
@@ -2292,6 +2335,7 @@ const App = (() => {
       <!-- Actions -->
       <div class="profile-actions">
         <button class="btn-primary" onclick="App.sharePinLocation()">📲 Share</button>
+        <button class="btn-outline" id="btn-clear-buffer" onclick="App.clearBuffer()">🗺️ Remove Buffer</button>
         <button class="btn-outline" onclick="App.clearDroppedPin()">🗑️ Clear Pin</button>
       </div>
     `;
@@ -2306,7 +2350,7 @@ const App = (() => {
   }
 
   async function loadPinFacilities(lat, lng) {
-    const r = 2000;
+    const r = 2500;
     const query = `[out:json][timeout:25];(node["amenity"~"hospital|clinic|school|college|bank|pharmacy"](around:${r},${lat},${lng});node["shop"="supermarket"](around:${r},${lat},${lng});node["leisure"="park"](around:${r},${lat},${lng});way["leisure"="park"](around:${r},${lat},${lng});node["railway"="station"](around:${r},${lat},${lng}););out tags;`;
     const loadingEl = document.getElementById('pin-fac-loading');
     const gridEl = document.getElementById('pin-fac-grid');
@@ -2343,9 +2387,24 @@ const App = (() => {
   function clearPin() {
     if (state.pinMarker) { state.map.removeLayer(state.pinMarker); state.pinMarker = null; }
     if (state.pinBuffer) { state.map.removeLayer(state.pinBuffer); state.pinBuffer = null; }
+    removeBufferClip();
     restoreLayerSnapshot();
     state._pinData = null;
     document.getElementById('sidebar').classList.remove('open');
+  }
+
+  // Remove buffer ring + clip + restore layer toggles, but keep pin + sidebar open
+  function clearBuffer() {
+    if (state.pinBuffer) { state.map.removeLayer(state.pinBuffer); state.pinBuffer = null; }
+    removeBufferClip();
+    restoreLayerSnapshot();
+    // Update sidebar hint and hide the button
+    const hint = document.getElementById('pin-mode-hint');
+    if (hint) hint.textContent = '📍 Custom pin';
+    const coordChip = document.getElementById('pin-radius-note');
+    if (coordChip) coordChip.style.display = 'none';
+    const clearBufBtn = document.getElementById('btn-clear-buffer');
+    if (clearBufBtn) clearBufBtn.style.display = 'none';
   }
 
   function sharePinLocation() {
@@ -2469,6 +2528,7 @@ const App = (() => {
     compareZone,
     openZone: openZoneProfile,
     clearDroppedPin: clearPin,
+    clearBuffer,
     sharePinLocation,
     showAllZones,
   };
